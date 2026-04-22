@@ -222,21 +222,6 @@ func dialViaProxyJump(targetAddr string, targetConfig *ssh.ClientConfig, jumps [
 	return targetClient, cleanup, nil
 }
 
-func runCommand(sshc *ssh.Client, cmd string) (string, error) {
-	s, err := sshc.NewSession()
-	if err != nil {
-		return "", fmt.Errorf("error creating session: %w", err)
-	}
-	defer s.Close()
-
-	o, err := s.CombinedOutput(cmd)
-	if err != nil {
-		return "", fmt.Errorf("error running command: %w", err)
-	}
-
-	return string(o), nil
-}
-
 func configForHost(host string, agent agent.ExtendedAgent) (string, *ssh.ClientConfig, error) {
 	khfs, err := ssh_config.GetStrict(host, "UserKnownHostsFile")
 	if err != nil {
