@@ -79,6 +79,8 @@ type sshDialer struct {
 
 	agent           agent.ExtendedAgent
 	hostnameMapping map[string]string
+
+	directDialer net.Dialer
 }
 
 func (d *sshDialer) dial(ctx context.Context, network, addr string) (net.Conn, error) {
@@ -97,8 +99,7 @@ func (d *sshDialer) dial(ctx context.Context, network, addr string) (net.Conn, e
 
 	if jumphost == "" {
 		log.Printf("No jumphosts configured for %s, dialing directly", addr)
-		var d net.Dialer
-		return d.DialContext(ctx, network, addr)
+		return d.directDialer.DialContext(ctx, network, addr)
 	}
 
 	// TODO(sebastian.widmer) Per jumphost connection pooling to not block multiple connections on SSH connection setup.
