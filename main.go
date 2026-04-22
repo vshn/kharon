@@ -38,7 +38,13 @@ func main() {
 	if err != nil {
 		log.Fatalf("SSH_AUTH_SOCK is not a valid socket: %v", err)
 	}
-	if agentSock == "" {
+	if agentSock != "" {
+		rs, err := replaceTildeWithHome(agentSock)
+		if err != nil {
+			log.Fatalf("Failed to replace `~/` with home directory in agent socket path: %v", err)
+		}
+		agentSock = rs
+	} else {
 		// ssh-agent(1) provides a UNIX socket at $SSH_AUTH_SOCK.
 		socket := os.Getenv("SSH_AUTH_SOCK")
 		if socket == "" {
@@ -361,12 +367,9 @@ func configForHost(host string, agent agent.ExtendedAgent) (string, *ssh.ClientC
 	}
 	akhfs := make([]string, 0)
 	for _, khf := range strings.Fields(khfs) {
-		if strings.HasPrefix(khf, "~/") {
-			home, err := os.UserHomeDir()
-			if err != nil {
-				return "", nil, fmt.Errorf("error getting user home directory: %w", err)
-			}
-			khf = filepath.Join(home, khf[2:])
+		khf, err := replaceTildeWithHome(khf)
+		if err != nil {
+			return "", nil, fmt.Errorf("error replacing `~/` with home directory for UserKnownHostsFile %s: %w", khf, err)
 		}
 
 		akhf, err := filepath.Abs(khf)
@@ -491,4 +494,15 @@ func parseProxyCommand(cmd string) (hostName, hostPort, proxyName string, err er
 	}
 
 	return hostName, hostPort, parts[4], nil
+}
+
+func replaceTildeWithHome(path string) (string, error) {
+	if strings.HasPrefix(path, "~/") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("error getting user home directory: %w", err)
+		}
+		return filepath.Join(home, path[2:]), nil
+	}
+	return path, nil
 }
