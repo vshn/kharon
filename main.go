@@ -32,14 +32,23 @@ func main() {
 		log.Fatalf("Failed to load hostname mapping: %v", err)
 	}
 
-	// ssh-agent(1) provides a UNIX socket at $SSH_AUTH_SOCK.
-	socket := os.Getenv("SSH_AUTH_SOCK")
-	if socket == "" {
-		log.Fatal("SSH_AUTH_SOCK is not set")
+	// TODO(sebastian.widmer) This can in theory be different for different jumphosts, but let's assume it's the same for all of them for now.
+	// We can always add support for per-jumphost agent sockets later if needed.
+	agentSock, err := ssh_config.GetStrict("6372ffc2-9466-4e89-b60d-14307aa583a5.internal.smart-connect.io", "IdentityAgent")
+	if err != nil {
+		log.Fatalf("SSH_AUTH_SOCK is not a valid socket: %v", err)
 	}
-	log.Printf("Using SSH agent socket: %s", socket)
+	if agentSock == "" {
+		// ssh-agent(1) provides a UNIX socket at $SSH_AUTH_SOCK.
+		socket := os.Getenv("SSH_AUTH_SOCK")
+		if socket == "" {
+			log.Fatal("SSH_AUTH_SOCK is not set")
+		}
+		log.Printf("Using SSH agent socket: %s", socket)
+		agentSock = socket
+	}
 
-	sshAgentConn, err := net.Dial("unix", socket)
+	sshAgentConn, err := net.Dial("unix", agentSock)
 	if err != nil {
 		log.Fatalf("Failed to open SSH_AUTH_SOCK: %v", err)
 	}
