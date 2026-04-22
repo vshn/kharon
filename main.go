@@ -146,7 +146,7 @@ func (m *clientMgr) GetClient(ctx context.Context) (*ssh.Client, error) {
 	}
 
 	// TODO(sebastian.widmer) Supervision, reconnection, teardown, younameit
-	jumphosts, err := jumphostChainForTarget(m.Jumphost)
+	jumphosts, err := jumphostChainForTarget(ssh_config.DefaultUserSettings, m.Jumphost)
 	if err != nil {
 		return nil, fmt.Errorf("error getting jumphost chain for %s: %w", m.Jumphost, err)
 	}
@@ -448,33 +448,35 @@ func configForHost(host string, agent agent.ExtendedAgent) (string, *ssh.ClientC
 	}, nil
 }
 
-func jumphostChainForTarget(host string) ([]string, error) {
+func jumphostChainForTarget(conf *ssh_config.UserSettings, host string) ([]string, error) {
 	chain := []string{host}
 
 	for {
-		jump, err := ssh_config.GetStrict(host, "ProxyJump")
+		jump, err := conf.GetStrict(host, "ProxyJump")
 		if err != nil {
 			return nil, fmt.Errorf("error getting ProxyJump for host %s: %w", host, err)
 		}
 		if jump == "" {
-			pc, err := ssh_config.GetStrict(host, "ProxyCommand")
+			pc, err := conf.GetStrict(host, "ProxyCommand")
 			if err != nil {
 				return nil, fmt.Errorf("error getting ProxyCommand for host %s: %w", host, err)
 			}
-			if pc != "" {
-				log.Printf("Fallback to ProxyCommand for host %s: %s", host, pc)
-				_, _, extracted, err := parseProxyCommand(pc)
-				if err != nil {
-					return nil, fmt.Errorf("error parsing ProxyCommand for host %s: %w", host, err)
-				}
-				log.Printf("Extracted jumphost from ProxyCommand for host %s: %s", host, extracted)
-				chain = append(chain, extracted)
+			if pc == "" {
 				break
 			}
-			break
+			log.Printf("Fallback to ProxyCommand for host %s: %s", host, pc)
+			_, _, extracted, err := parseProxyCommand(pc)
+			if err != nil {
+				return nil, fmt.Errorf("error parsing ProxyCommand for host %s: %w", host, err)
+			}
+			log.Printf("Extracted jumphost from ProxyCommand for host %s: %s", host, extracted)
+			jump = extracted
 		}
 		if strings.Contains(jump, ",") {
 			return nil, fmt.Errorf("multiple ProxyJump entries for host %s are not supported", host)
+		}
+		if slices.Contains(chain, jump) {
+			return nil, fmt.Errorf("circular ProxyJump detected for host %s: %s is already in the chain", host, jump)
 		}
 		chain = append(chain, jump)
 		host = jump

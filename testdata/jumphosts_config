@@ -1,0 +1,35 @@
+Host chain.1.target
+  ProxyJump chain1.2
+
+Host chain1.2
+  ProxyJump chain1.3
+
+Host chain1.3
+  UserName test
+
+Host chain.2.target
+  ProxyJump chain2.2
+
+Host chain.proxycommand.target
+  ProxyCommand ssh -W chain.proxycommand.target:22 -- chain.proxycommand.2
+
+Host chain.proxycommand.2
+  ProxyCommand ssh -W chain.proxycommand.2:22 -- chain.proxycommand.3
+
+Host chain.proxycommand.3
+  ProxyCommand ssh -W 1.2.3.4:22 -- chain.proxycommand.4
+
+Host circular.target
+  ProxyJump circular.b
+
+Host circular.b
+  ProxyJump circular.c
+
+Host circular.c
+  ProxyCommand ssh -W circular.c:22 -- circular.target
+
+Host unknown.proxycommand
+  ProxyCommand ssh -F -s -W test:22 -- otherhost
+
+Host multiple.proxyjump
+  ProxyJump a,b
