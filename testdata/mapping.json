@@ -1,0 +1,8 @@
+{
+  "c-bettersmarter-prod01.vshnmanaged.net": "jumphost1",
+  "a.storage.bettersmarter.ch": "jumphost4",
+  "api.c-bettersmarter-prod01.vshnmanaged.net": "jumphost2",
+  "vcenter.bettersmarter.ch": "jumphost3",
+  "b.storage.bettersmarter.ch": "jumphost5",
+  "c.storage.bettersmarter.ch": "jumphost6"
+}

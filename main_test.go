@@ -68,3 +68,16 @@ func Test_jumphostChainForTarget(t *testing.T) {
 		})
 	}
 }
+
+func Test_loadHostnameMapping(t *testing.T) {
+	loaded, err := loadHostnameMapping(filepath.Join("testdata", "mapping.json"))
+	assert.NoError(t, err)
+	assert.Equal(t, []hostSuffixJumphostMapping{
+		{HostSuffix: "api.c-bettersmarter-prod01.vshnmanaged.net", Jumphost: "jumphost2"},
+		{HostSuffix: "c-bettersmarter-prod01.vshnmanaged.net", Jumphost: "jumphost1"},
+		{HostSuffix: "a.storage.bettersmarter.ch", Jumphost: "jumphost4"},
+		{HostSuffix: "b.storage.bettersmarter.ch", Jumphost: "jumphost5"},
+		{HostSuffix: "c.storage.bettersmarter.ch", Jumphost: "jumphost6"},
+		{HostSuffix: "vcenter.bettersmarter.ch", Jumphost: "jumphost3"},
+	}, loaded)
+}

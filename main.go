@@ -105,7 +105,7 @@ func loadHostnameMapping(mappingFile string) ([]hostSuffixJumphostMapping, error
 	}
 	// Longest suffix first, so that more specific mappings are preferred over less specific ones.
 	slices.SortFunc(hostnameMapping, func(a, b hostSuffixJumphostMapping) int {
-		return len(b.HostSuffix) - len(a.HostSuffix)
+		return 10*(len(b.HostSuffix)-len(a.HostSuffix)) + strings.Compare(a.HostSuffix, b.HostSuffix)
 	})
 	log.Printf("Loaded %v hostname mappings", len(hostnameMapping))
 	return hostnameMapping, nil
