@@ -180,6 +180,17 @@ func (p *sshParser) parseMatch(val *token, hasEquals bool, comment string) sshPa
 	}
 	criterion := strings.ToLower(fields[0])
 
+	isFinal := false
+	if criterion == "final" {
+		isFinal = true
+		if len(fields) > 1 {
+			criterion = strings.ToLower(fields[1])
+		} else {
+			p.raiseErrorf(val, "ssh_config: Match final requires a criterion (e.g. Host or all)")
+			return nil
+		}
+	}
+
 	switch criterion {
 	case "all":
 		// "Match all" is equivalent to "Host *" — matches everything.
@@ -190,6 +201,7 @@ func (p *sshParser) parseMatch(val *token, hasEquals bool, comment string) sshPa
 			spaceBeforeComment: spaceBeforeComment,
 			hasEquals:          hasEquals,
 			isMatch:            true,
+			isFinal:            isFinal,
 			matchKeyword:       fields[0], // preserve original case
 		})
 		return p.parseStart
@@ -218,6 +230,7 @@ func (p *sshParser) parseMatch(val *token, hasEquals bool, comment string) sshPa
 			spaceBeforeComment: spaceBeforeComment,
 			hasEquals:          hasEquals,
 			isMatch:            true,
+			isFinal:            isFinal,
 			matchKeyword:       fields[0], // preserve original case
 		})
 		return p.parseStart

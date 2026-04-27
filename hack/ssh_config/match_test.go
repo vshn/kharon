@@ -424,11 +424,6 @@ func TestMatchUnsupportedCriteria(t *testing.T) {
 			wantErr: "ssh_config: unsupported Match criterion",
 		},
 		{
-			name:    "final",
-			config:  "Match final\n    Port 22",
-			wantErr: "ssh_config: unsupported Match criterion",
-		},
-		{
 			name:    "tagged",
 			config:  "Match Tagged mytag\n    Port 22",
 			wantErr: "ssh_config: unsupported Match criterion",
@@ -495,6 +490,32 @@ Match all
 		if vals[i] != want[i] {
 			t.Errorf("GetAll[%d] = %q, want %q", i, vals[i], want[i])
 		}
+	}
+}
+
+func TestMatchDropFinal(t *testing.T) {
+	config := "Match final all\n    Port 2222"
+	cfg, err := Decode(strings.NewReader(config))
+	if err != nil {
+		t.Fatalf("unexpected parse error: %v", err)
+	}
+
+	val, err := cfg.Get("anyhost", "Port")
+	if err != nil {
+		t.Fatalf("unexpected Get error: %v", err)
+	}
+	if val != "" {
+		t.Errorf("expected Port to be empty since `Match final` is dropped, got %q", val)
+	}
+}
+func TestMatchDropFinalNoFurtherCriterion(t *testing.T) {
+	config := "Match final\n    Port 2222"
+	_, err := Decode(strings.NewReader(config))
+	if err == nil {
+		t.Fatal("expected error due to missing criterion after Match final, got nil")
+	}
+	if !strings.Contains(err.Error(), "Match final requires a criterion") {
+		t.Fatalf("unexpected parse error: %v", err)
 	}
 }
 

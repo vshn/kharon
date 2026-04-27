@@ -31,6 +31,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	osuser "os/user"
 	"path/filepath"
@@ -378,6 +379,13 @@ func (c *Config) Get(alias, key string) (string, error) {
 		if !host.Matches(alias) {
 			continue
 		}
+		if host.isMatch && host.isFinal {
+			// TODO(bastjan): Probably best to finalize the implementation of "Match final" and upstream it.
+			// Workaround for Fedora 43 injecting default config with "Match final all".
+			// Currently nothing interesting in there for us.
+			log.Println("Warning: ssh_config: skipping unsupported `Match final` block")
+			continue
+		}
 		for _, node := range host.Nodes {
 			switch t := node.(type) {
 			case *Empty:
@@ -408,6 +416,9 @@ func (c *Config) GetAll(alias, key string) ([]string, error) {
 	all := []string(nil)
 	for _, host := range c.Hosts {
 		if !host.Matches(alias) {
+			continue
+		}
+		if host.isMatch && host.isFinal {
 			continue
 		}
 		for _, node := range host.Nodes {
@@ -539,6 +550,8 @@ type Host struct {
 	implicit bool
 	// isMatch is true if this block was created by a Match directive.
 	isMatch bool
+	// isFinal is true if this block was created by a "Match final" directive.
+	isFinal bool
 	// matchKeyword stores the original text after "Match" (e.g. "Host" or
 	// "all") so we can round-trip correctly.
 	matchKeyword string
@@ -575,6 +588,9 @@ func (h *Host) String() string {
 		buf.WriteString(strings.Repeat(" ", int(h.leadingSpace)))
 		if h.isMatch {
 			buf.WriteString("Match")
+			if h.isFinal {
+				buf.WriteString(" final")
+			}
 			if h.hasEquals {
 				buf.WriteString(" = ")
 			} else {
