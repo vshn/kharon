@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -104,6 +105,14 @@ func Test_Start(t *testing.T) {
 	t.Logf("Spawned SSH agent with public key %x at socket %s", userPubKey, agentSocket)
 	t.Setenv("SSH_AUTH_SOCK", agentSocket)
 
+	httpServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.Copy(io.Discard, r.Body)
+		r.Body.Close()
+		w.Header().Set("X-Request-Host", r.Host)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer httpServer.Close()
+
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
@@ -123,8 +132,7 @@ func Test_Start(t *testing.T) {
 		Transport: transport,
 	}
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
-		// TODO: local testing of the proxy without relying on an external website
-		resp, err := client.Get("https://vshn.ch")
+		resp, err := client.Get(httpServer.URL)
 		require.NoError(t, err)
 		io.Copy(io.Discard, resp.Body)
 		resp.Body.Close()
