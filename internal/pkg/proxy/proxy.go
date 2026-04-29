@@ -3,6 +3,7 @@ package proxy
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -17,10 +18,11 @@ import (
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
 	"golang.org/x/crypto/ssh/knownhosts"
+	"golang.org/x/sync/errgroup"
 	"tailscale.com/net/socks5"
 )
 
-func Start(mappingFile string, sshConfig *ssh_config.UserSettings) error {
+func Start(ctx context.Context, addr, mappingFile string, sshConfig *ssh_config.UserSettings) error {
 	hostnameMapping, err := loadHostnameMapping(mappingFile)
 	if err != nil {
 		return fmt.Errorf("failed to load hostname mapping: %w", err)
@@ -71,17 +73,26 @@ func Start(mappingFile string, sshConfig *ssh_config.UserSettings) error {
 			return d.dial(ctx, network, addr)
 		},
 	}
-	log.Print("starting SOCKS5 server on 127.0.0.1:12000")
-	listener, err := net.Listen("tcp", "127.0.0.1:12000")
+	log.Printf("starting SOCKS5 server on %s", addr)
+	listener, err := net.Listen("tcp", addr)
 	if err != nil {
 		return fmt.Errorf("failed to start listener: %w", err)
 	}
-	defer listener.Close()
-	if err := socks5Server.Serve(listener); err != nil {
-		return fmt.Errorf("SOCKS5 server error: %w", err)
-	}
 
-	return nil
+	eg, egCtx := errgroup.WithContext(ctx)
+	eg.Go(func() error {
+		<-egCtx.Done()
+		log.Print("shutting down SOCKS5 server")
+		return listener.Close()
+	})
+	eg.Go(func() error {
+		if err := socks5Server.Serve(listener); err != nil && !errors.Is(err, net.ErrClosed) {
+			return fmt.Errorf("SOCKS5 server error: %w", err)
+		}
+		return nil
+	})
+
+	return eg.Wait()
 }
 
 func loadHostnameMapping(mappingFile string) ([]hostSuffixJumphostMapping, error) {

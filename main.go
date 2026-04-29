@@ -1,8 +1,10 @@
 package main
 
 import (
+	"context"
 	"log"
 	"os"
+	"os/signal"
 
 	"github.com/bastjan/smart-access/internal/pkg/proxy"
 	"github.com/kevinburke/ssh_config"
@@ -15,7 +17,10 @@ func main() {
 		log.Fatalf("Usage: %s mapping_file.json", os.Args[0])
 	}
 
-	if err := proxy.Start(os.Args[1], ssh_config.DefaultUserSettings); err != nil {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+
+	if err := proxy.Start(ctx, "127.0.0.1:12000", os.Args[1], ssh_config.DefaultUserSettings); err != nil {
 		log.Fatalf("Failed to start proxy: %v", err)
 	}
 }

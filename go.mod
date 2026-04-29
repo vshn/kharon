@@ -6,6 +6,7 @@ require (
 	github.com/kevinburke/ssh_config v1.6.0
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/crypto v0.49.0
+	golang.org/x/sync v0.20.0
 	tailscale.com v1.96.5
 )
 

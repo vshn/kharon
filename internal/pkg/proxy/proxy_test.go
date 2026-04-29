@@ -1,12 +1,24 @@
 package proxy
 
 import (
+	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"io"
+	"net"
+	"net/http"
+	"net/url"
+	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
+	"time"
 
 	"github.com/kevinburke/ssh_config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/crypto/ssh/agent"
+	"golang.org/x/sync/errgroup"
 )
 
 func Test_jumphostChainForTarget(t *testing.T) {
@@ -81,4 +93,95 @@ func Test_loadHostnameMapping(t *testing.T) {
 		{HostSuffix: "c.storage.bettersmarter.ch", Jumphost: "jumphost6"},
 		{HostSuffix: "vcenter.bettersmarter.ch", Jumphost: "jumphost3"},
 	}, loaded)
+}
+
+func Test_Start(t *testing.T) {
+	u := &ssh_config.UserSettings{}
+	u.ConfigFinder(func() string {
+		return filepath.Join("testdata", "jumphosts_config")
+	})
+	userPubKey, agentSocket := spawnSSHAgent(t)
+	t.Logf("Spawned SSH agent with public key %x at socket %s", userPubKey, agentSocket)
+	t.Setenv("SSH_AUTH_SOCK", agentSocket)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	proxyPort, err := freePort()
+	require.NoError(t, err, "failed to find free port for proxy")
+	proxyAddr := net.JoinHostPort("127.0.0.1", strconv.Itoa(proxyPort))
+	wg, wgCtx := errgroup.WithContext(ctx)
+	wg.Go(func() error {
+		return Start(wgCtx, proxyAddr, "testdata/mapping.json", u)
+	})
+
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.Proxy = func(req *http.Request) (*url.URL, error) {
+		return url.Parse("socks5://" + proxyAddr)
+	}
+	client := &http.Client{
+		Transport: transport,
+	}
+	require.EventuallyWithT(t, func(t *assert.CollectT) {
+		// TODO: local testing of the proxy without relying on an external website
+		resp, err := client.Get("https://vshn.ch")
+		require.NoError(t, err)
+		io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+	}, 5*time.Second, 100*time.Millisecond, "proxy did not start in time")
+
+	cancel()
+
+	require.NoError(t, wg.Wait())
+}
+
+// freePort returns a free port on the host.
+func freePort() (int, error) {
+	a, err := net.ResolveTCPAddr("tcp", ":0")
+	if err != nil {
+		return 0, err
+	}
+	l, err := net.ListenTCP("tcp", a)
+	if err != nil {
+		return 0, err
+	}
+	defer l.Close()
+	return l.Addr().(*net.TCPAddr).Port, nil
+}
+
+// spawnSSHAgent generates an ed25519 key pair, adds it to an in-memory SSH
+// agent, and serves the agent on a temporary Unix socket.
+// It returns the public key and the path to the socket.
+// The agent is shut down and the socket removed when the test ends.
+func spawnSSHAgent(t *testing.T) (pub ed25519.PublicKey, socketPath string) {
+	t.Helper()
+
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+
+	ag := agent.NewKeyring()
+
+	require.NoError(t, ag.Add(agent.AddedKey{PrivateKey: priv}))
+
+	tmp := t.TempDir()
+	socketPath = tmp + "/agent.sock"
+	ln, err := net.Listen("unix", socketPath)
+	require.NoError(t, err, "spawnSSHAgent: listen on unix socket")
+
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			go agent.ServeAgent(ag, conn)
+		}
+	}()
+
+	t.Cleanup(func() {
+		require.NoError(t, ln.Close())
+		require.NoError(t, os.RemoveAll(tmp))
+	})
+
+	return pub, socketPath
 }
