@@ -1,7 +1,7 @@
 # kharon
 
-<p align="center">
-  Kharon ferries your connections safely across <del>the river Styx</del> SSH jumphosts into <del>the underworld</del> private networks.<br />
+<p align="center" width=80%>
+Kharon ferries your connections safely across <del>the river Styx</del> SSH jumphosts into <del>the underworld</del> private networks.<br />
 </p>
 
 Smart cluster access solution tailored to VSHNs management of Kubernetes clusters over SSH jumphosts.
