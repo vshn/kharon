@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -103,27 +104,18 @@ func Test_loadHostnameMapping(t *testing.T) {
 }
 
 func Test_Start(t *testing.T) {
-	localhostZone := mockdns.Zone{A: []string{"127.0.0.1"}, AAAA: []string{"::1"}}
-	mockDNSServer, err := mockdns.NewServerWithLogger(map[string]mockdns.Zone{
-		"no.hop.":     localhostZone,
-		"one.hop.":    localhostZone,
-		"two.hops.":   localhostZone,
-		"three.hops.": localhostZone,
-	}, new(nopLogger), true)
-	require.NoError(t, err, "failed to start mock DNS server")
-	defer mockDNSServer.Close()
-	mockDNSResolver := &net.Resolver{}
-	mockDNSServer.PatchNet(mockDNSResolver)
-
 	userPubKey, agentSocket := spawnSSHAgent(t)
 	t.Logf("Spawned SSH agent with public key %x at socket %s", userPubKey, agentSocket)
 
+	localDNSResolver := localhostResolverFor(t, "no.hop", "one.hop")
+	dmz2DNSResolver := localhostResolverFor(t, "two.hops", "jumphost3")
+	dmz3DNSResolver := localhostResolverFor(t, "three.hops")
+
 	allowedPubKey, err := ssh.NewPublicKey(userPubKey)
 	require.NoError(t, err)
-	jumphostDialer := net.Dialer{Resolver: mockDNSResolver}
-	jumpHost1 := spawnForwardingSSHServer(t, allowedPubKey, jumphostDialer)
-	jumpHost2 := spawnForwardingSSHServer(t, allowedPubKey, jumphostDialer)
-	jumpHost3 := spawnForwardingSSHServer(t, allowedPubKey, jumphostDialer)
+	jumpHost1 := spawnForwardingSSHServer(t, allowedPubKey, net.Dialer{Resolver: localDNSResolver})
+	jumpHost2 := spawnForwardingSSHServer(t, allowedPubKey, net.Dialer{Resolver: dmz2DNSResolver})
+	jumpHost3 := spawnForwardingSSHServer(t, allowedPubKey, net.Dialer{Resolver: dmz3DNSResolver})
 	knownHostsPath := writeKnownHostsFile(t, knownHostEntry{
 		hostname: "127.0.0.1",
 		port:     jumpHost1.Port(),
@@ -133,7 +125,7 @@ func Test_Start(t *testing.T) {
 		port:     jumpHost2.Port(),
 		hostKey:  jumpHost2.HostKey(),
 	}, knownHostEntry{
-		hostname: "127.0.0.1",
+		hostname: "jumphost3",
 		port:     jumpHost3.Port(),
 		hostKey:  jumpHost3.HostKey(),
 	})
@@ -162,7 +154,6 @@ Host jumphost2
 	Port %d
 
 Host jumphost3
-	HostName 127.0.0.1
 	ProxyJump jumphost2
 	Port %d
 `, agentSocket, knownHostsPath, jumpHost1.Port(), jumpHost2.Port(), jumpHost3.Port())), 0o600))
@@ -192,7 +183,7 @@ Host jumphost3
 		p := Proxy{
 			SSHConfig: u,
 			DirectDialer: net.Dialer{
-				Resolver: mockDNSResolver,
+				Resolver: localDNSResolver,
 			},
 		}
 		return p.Start(wgCtx, proxyAddr, mappingPath)
@@ -263,6 +254,11 @@ type forwardingSSHServer struct {
 	addr    *net.TCPAddr
 }
 
+// spawnForwardingSSHServer starts an SSH server that accepts connections using the allowedClientPubKey.
+// It supports only "direct-tcpip" channels and forwards them to the requested destination using the provided dialer.
+// All other unsupported SSH features (like exec or shell channels) are rejected.
+// The server listens on a random free port on localhost and uses a randomly generated host key.
+// The server is shut down when the test ends.
 func spawnForwardingSSHServer(t *testing.T, allowedClientPubKey ssh.PublicKey, dialer net.Dialer) *forwardingSSHServer {
 	t.Helper()
 
@@ -385,6 +381,29 @@ func freePort() (int, error) {
 	}
 	defer l.Close()
 	return l.Addr().(*net.TCPAddr).Port, nil
+}
+
+// localhostResolverFor returns a net.Resolver that resolves the given hosts to localhost.
+// It starts a mock DNS server that serves the necessary records and sets the resolver to use that server.
+// The server is shut down when the test ends.
+func localhostResolverFor(t *testing.T, hosts ...string) *net.Resolver {
+	t.Helper()
+
+	zones := make(map[string]mockdns.Zone, len(hosts))
+	localhostZone := mockdns.Zone{A: []string{"127.0.0.1"}, AAAA: []string{"::1"}}
+	for _, host := range hosts {
+		zones[strings.TrimSuffix(host, ".")+"."] = localhostZone
+	}
+
+	mockDNSServer, err := mockdns.NewServerWithLogger(zones, new(nopLogger), true)
+	require.NoError(t, err, "failed to start mock DNS server")
+	t.Cleanup(func() {
+		require.NoError(t, mockDNSServer.Close(), "failed to stop mock DNS server")
+	})
+
+	mockDNSResolver := &net.Resolver{}
+	mockDNSServer.PatchNet(mockDNSResolver)
+	return mockDNSResolver
 }
 
 // spawnSSHAgent generates an ed25519 key pair, adds it to an in-memory SSH
