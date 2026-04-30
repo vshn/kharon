@@ -6,7 +6,7 @@ import (
 	"os"
 	"os/signal"
 
-	"github.com/bastjan/smart-access/internal/pkg/proxy"
+	"github.com/vshn/kharon/internal/pkg/proxy"
 )
 
 func main() {

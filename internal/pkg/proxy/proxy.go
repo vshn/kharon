@@ -22,7 +22,7 @@ import (
 	"tailscale.com/net/socks5"
 )
 
-const keepAliveRequestType = "keepalive@smart-access"
+const keepAliveRequestType = "keepalive@kharon"
 
 type Proxy struct {
 	// SSHConfig is the SSH config to use for determining jumphosts and SSH connection settings.
@@ -48,7 +48,7 @@ func (p *Proxy) Start(ctx context.Context, addr, mappingFile string) error {
 		sshConfig = ssh_config.DefaultUserSettings
 	}
 
-	// TODO(sebastian.widmer) This can in theory be different for different jumphosts, but let's assume it's the same for all of them for now.
+	// TODO(bastjan) This can in theory be different for different jumphosts, but let's assume it's the same for all of them for now.
 	// We can always add support for per-jumphost agent sockets later if needed.
 	agentSock, err := sshConfig.GetStrict("6372ffc2-9466-4e89-b60d-14307aa583a5.internal.smart-connect.io", "IdentityAgent")
 	if err != nil {
@@ -340,7 +340,7 @@ type sshJump struct {
 	Config *ssh.ClientConfig
 }
 
-// TODO(sebastian.widmer) This is horrible AI code. Refactor to be more readable.
+// TODO(bastjan) This is horrible AI code. Refactor to be more readable.
 func dialViaProxyJump(targetAddr string, targetConfig *ssh.ClientConfig, jumps []sshJump) (*ssh.Client, func(), error) {
 	if len(jumps) == 0 {
 		c, err := ssh.Dial("tcp", targetAddr, targetConfig)

@@ -1,4 +1,4 @@
-# smart-access
+# kharon
 
 Smart cluster access solution tailored to VSHNs management of Kubernetes clusters over SSH jumphosts.
 

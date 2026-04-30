@@ -1,9 +1,0 @@
-[Unit]
-Description=Smart Access cluster proxy
-
-[Service]
-Environment="SSH_AUTH_SOCK=%t/gcr/ssh"
-ExecStart=%h/workspace/smart-access/smart-access %h/workspace/smart-access/domain_jumphost_mapping.json
-
-[Install]
-WantedBy=default.target

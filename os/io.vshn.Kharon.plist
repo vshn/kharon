@@ -3,20 +3,20 @@
 <plist version="1.0">
 <dict>
 	<key>Label</key>
-	<string>ch.sebastianwidmer.SmartAccess</string>
+	<string>io.vshn.Kharon</string>
 	<key>LimitLoadToSessionType</key>
 	<string>Aqua</string>
 	<key>ProgramArguments</key>
 	<array>
-		<string>/Users/sebastianwidmer/workspace/smart-access/smart-access</string>
-		<string>/Users/sebastianwidmer/workspace/smart-access/domain_jumphost_mapping.json</string>
+		<string>/Users/USER/workspace/kharon/kharon</string>
+		<string>/Users/USER/workspace/kharon/domain_jumphost_mapping.json</string>
 	</array>
 	<key>KeepAlive</key>
 	<true/>
 	<key>StandardOutPath</key>
-	<string>/Users/sebastianwidmer/Library/Logs/ch.sebastianwidmer.SmartAccess.out.log</string>
+	<string>/Users/USER/Library/Logs/io.vshn.Kharon.out.log</string>
 	<key>StandardErrorPath</key>
-	<string>/Users/sebastianwidmer/Library/Logs/ch.sebastianwidmer.SmartAccess.err.log</string>
+	<string>/Users/USER/Library/Logs/io.vshn.Kharon.err.log</string>
 	<key>ProcessType</key>
 	<string>Interactive</string>
 </dict>

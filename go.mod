@@ -1,4 +1,4 @@
-module github.com/bastjan/smart-access
+module github.com/vshn/kharon
 
 go 1.26.1
 

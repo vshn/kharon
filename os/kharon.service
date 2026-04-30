@@ -1,0 +1,9 @@
+[Unit]
+Description=Kharon - Smart cluster access proxy
+
+[Service]
+Environment="SSH_AUTH_SOCK=%t/gcr/ssh"
+ExecStart=%h/workspace/kharon/kharon %h/workspace/kharon/domain_jumphost_mapping.json
+
+[Install]
+WantedBy=default.target
