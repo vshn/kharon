@@ -1,10 +1,8 @@
 # kharon
 
-<p align="center" width=80%>
-Kharon ferries your connections safely across <del>the river Styx</del> SSH jumphosts into <del>the underworld</del> private networks.<br />
-</p>
+_Kharon ferries your connections safely across <del>the river Styx</del> SSH jumphosts into <del>the underworld</del> private networks._
 
-Smart cluster access solution tailored to VSHNs management of Kubernetes clusters over SSH jumphosts.
+Kharon is a smart cluster access solution tailored to VSHNs management of Kubernetes clusters over SSH jumphosts.
 
 Starts a socks5 proxy that automatically routes cluster domains of configured jumphosts.
 
