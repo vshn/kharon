@@ -1,6 +1,9 @@
 # kharon
 
-_Kharon ferries your connections safely across <del>the river Styx</del> SSH jumphosts into <del>the underworld</del> private networks._
+<p align="center">
+  <img width=256px src="./assets/Gustave_Doré_-_Dante_Alighieri_-_Inferno_-_Plate_9_(Canto_III_-_Charon)_medium.jpeg" alt="Gustave Doré's engravings illustrated the Divine Comedy (1861–1868); here Charon comes to ferry souls across the river Acheron to Hell" /><br />
+<i>Kharon ferries your connections safely across <del>the river Styx</del> SSH jumphosts into <del>the underworld</del> private networks.</i>
+</p>
 
 Kharon is a smart cluster access solution tailored to VSHNs management of Kubernetes clusters over SSH jumphosts.
 
