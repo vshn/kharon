@@ -29,6 +29,7 @@ fmt: ## Run go fmt against code
 
 .PHONY: vet
 vet: ## Run go vet against code
+	go tool github.com/kisielk/errcheck -ignoretests ./...
 	go vet ./...
 
 .PHONY: lint

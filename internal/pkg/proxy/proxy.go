@@ -12,9 +12,11 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/kevinburke/ssh_config"
+	"go.uber.org/multierr"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
 	"golang.org/x/crypto/ssh/knownhosts"
@@ -27,7 +29,9 @@ const keepAliveRequestType = "keepalive@kharon"
 type Proxy struct {
 	// SSHConfig is the SSH config to use for determining jumphosts and SSH connection settings.
 	// If not set, the proxy uses ssh_config.DefaultUserSettings.
-	SSHConfig *ssh_config.UserSettings
+	// The function is called on every Reload() and it should return a new instance of ssh_config.UserSettings each time.
+	// ssh_config.UserSettings has an internal cache and never reloads the config file after the first load.
+	SSHConfig func() *ssh_config.UserSettings
 
 	// DirectDialer is the dialer to use for direct connections.
 	DirectDialer net.Dialer
@@ -35,64 +39,28 @@ type Proxy struct {
 	// KeepAliveInterval is the interval for sending keep-alive messages to the jumphosts.
 	// Defaults to 3 seconds if not set.
 	KeepAliveInterval time.Duration
+
+	// dialer is the current dialer to use for incoming connections. It is stored atomically so that it can be replaced on the fly when reloading the configuration.
+	dialer atomic.Pointer[sshDialer]
 }
 
-func (p *Proxy) Start(ctx context.Context, addr, mappingFile string) error {
-	hostnameMapping, err := loadHostnameMapping(mappingFile)
+func (p *Proxy) Start(ctx context.Context, addr, mappingFile string) (err error) {
+	sshDialer, err := buildSSHDialer(p, mappingFile)
 	if err != nil {
-		return fmt.Errorf("failed to load hostname mapping: %w", err)
+		return fmt.Errorf("failed to build SSH dialer: %w", err)
 	}
-
-	sshConfig := p.SSHConfig
-	if sshConfig == nil {
-		sshConfig = ssh_config.DefaultUserSettings
-	}
-
-	// TODO(bastjan) This can in theory be different for different jumphosts, but let's assume it's the same for all of them for now.
-	// We can always add support for per-jumphost agent sockets later if needed.
-	agentSock, err := sshConfig.GetStrict("6372ffc2-9466-4e89-b60d-14307aa583a5.internal.smart-connect.io", "IdentityAgent")
-	if err != nil {
-		return fmt.Errorf("SSH_AUTH_SOCK is not a valid socket: %w", err)
-	}
-	if agentSock != "" {
-		rs, err := replaceTildeWithHome(agentSock)
-		if err != nil {
-			return fmt.Errorf("failed to replace `~/` with home directory in agent socket path: %w", err)
+	p.dialer.Store(sshDialer)
+	defer func() {
+		if oldDialer := p.dialer.Swap(nil); oldDialer != nil {
+			multierr.AppendInto(&err, oldDialer.Close())
 		}
-		agentSock = rs
-	} else {
-		// ssh-agent(1) provides a UNIX socket at $SSH_AUTH_SOCK.
-		socket := os.Getenv("SSH_AUTH_SOCK")
-		if socket == "" {
-			return fmt.Errorf("SSH_AUTH_SOCK is not set")
-		}
-		agentSock = socket
-	}
-	log.Printf("Using SSH agent socket: %s", agentSock)
-	sshAgentConn, err := net.Dial("unix", agentSock)
-	if err != nil {
-		return fmt.Errorf("failed to open SSH_AUTH_SOCK: %w", err)
-	}
-	defer sshAgentConn.Close()
-
-	agentClient := agent.NewClient(sshAgentConn)
-
-	d := &sshDialer{
-		agent:           agentClient,
-		hostnameMapping: hostnameMapping,
-
-		sshManagers: make(map[string]*clientMgr),
-
-		sshSettings:       sshConfig,
-		directDialer:      p.DirectDialer,
-		keepAliveInterval: p.keepAliveInterval(),
-	}
+	}()
 
 	socks5Server := &socks5.Server{
 		Logf: log.Printf,
 		Dialer: func(ctx context.Context, network, addr string) (net.Conn, error) {
 			log.Printf("New SOCKS5 connection %s://%s", network, addr)
-			return d.dial(ctx, network, addr)
+			return p.dialer.Load().dial(ctx, network, addr)
 		},
 	}
 	log.Printf("starting SOCKS5 server on %s", addr)
@@ -117,6 +85,26 @@ func (p *Proxy) Start(ctx context.Context, addr, mappingFile string) error {
 	return eg.Wait()
 }
 
+func (p *Proxy) Reload(mappingFile string) error {
+	current := p.dialer.Load()
+	if current == nil {
+		return fmt.Errorf("proxy is not running")
+	}
+
+	newDialer, err := buildSSHDialer(p, mappingFile)
+	if err != nil {
+		return fmt.Errorf("failed to build new SSH dialer: %w", err)
+	}
+
+	if p.dialer.CompareAndSwap(current, newDialer) {
+		return current.Close()
+	} else {
+		// Another reload happened in the meantime, or the proxy was stopped.
+		// Just close the new dialer and keep the current one running.
+		return newDialer.Close()
+	}
+}
+
 // keepAliveInterval returns the keep-alive interval to use for SSH connections, defaulting to 3 seconds if not set.
 func (p *Proxy) keepAliveInterval() time.Duration {
 	if p.KeepAliveInterval == 0 {
@@ -130,7 +118,7 @@ func loadHostnameMapping(mappingFile string) ([]hostSuffixJumphostMapping, error
 	if err != nil {
 		return nil, fmt.Errorf("failed to read mapping file: %w", err)
 	}
-	defer mf.Close()
+	defer func() { _ = mf.Close() }()
 	var hmp map[string]string
 	if err := json.NewDecoder(mf).Decode(&hmp); err != nil {
 		return nil, fmt.Errorf("failed to parse mapping file: %w", err)
@@ -161,6 +149,7 @@ type sshDialer struct {
 
 	routes sync.Map
 
+	agentConn       net.Conn
 	agent           agent.ExtendedAgent
 	hostnameMapping []hostSuffixJumphostMapping
 
@@ -170,15 +159,95 @@ type sshDialer struct {
 	keepAliveInterval time.Duration
 }
 
+func buildSSHDialer(p *Proxy, mappingFile string) (*sshDialer, error) {
+	hostnameMapping, err := loadHostnameMapping(mappingFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load hostname mapping: %w", err)
+	}
+
+	var sshConfig *ssh_config.UserSettings
+	if p.SSHConfig != nil {
+		sshConfig = p.SSHConfig()
+	}
+	if sshConfig == nil {
+		sshConfig = &ssh_config.UserSettings{}
+	}
+
+	// TODO(bastjan) This can in theory be different for different jumphosts, but let's assume it's the same for all of them for now.
+	// We can always add support for per-jumphost agent sockets later if needed.
+	agentSock, err := sshConfig.GetStrict("6372ffc2-9466-4e89-b60d-14307aa583a5.internal.smart-connect.io", "IdentityAgent")
+	if err != nil {
+		return nil, fmt.Errorf("SSH_AUTH_SOCK is not a valid socket: %w", err)
+	}
+	if agentSock != "" {
+		rs, err := replaceTildeWithHome(agentSock)
+		if err != nil {
+			return nil, fmt.Errorf("failed to replace `~/` with home directory in agent socket path: %w", err)
+		}
+		agentSock = rs
+	} else {
+		// ssh-agent(1) provides a UNIX socket at $SSH_AUTH_SOCK.
+		socket := os.Getenv("SSH_AUTH_SOCK")
+		if socket == "" {
+			return nil, fmt.Errorf("SSH_AUTH_SOCK is not set")
+		}
+		agentSock = socket
+	}
+	log.Printf("Using SSH agent socket: %s", agentSock)
+	sshAgentConn, err := net.Dial("unix", agentSock)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open SSH_AUTH_SOCK: %w", err)
+	}
+
+	agentClient := agent.NewClient(sshAgentConn)
+	return &sshDialer{
+		agentConn:       sshAgentConn,
+		agent:           agentClient,
+		hostnameMapping: hostnameMapping,
+
+		sshManagers: make(map[string]*clientMgr),
+
+		sshSettings:       sshConfig,
+		directDialer:      p.DirectDialer,
+		keepAliveInterval: p.keepAliveInterval(),
+	}, nil
+}
+
+func (d *sshDialer) Close() error {
+	d.sshManagersMux.Lock()
+	defer d.sshManagersMux.Unlock()
+
+	errs := make([]error, 0, len(d.sshManagers)+1)
+	errs = append(errs, d.agentConn.Close())
+
+	for _, mgr := range d.sshManagers {
+		errs = append(errs, mgr.Close())
+	}
+	return multierr.Combine(errs...)
+}
+
 type clientMgr struct {
 	Jumphost          string
 	Agent             agent.ExtendedAgent
 	SSHSettings       *ssh_config.UserSettings
 	KeepAliveInterval time.Duration
 
+	// clientMux protects access to client and clientCleanup.
+	// Both are set together when a new client is created, and both are set to nil when the client is closed.
 	clientMux sync.Mutex
 	client    *ssh.Client
-	cleanup   func()
+	// clientCleanup also closes client, client.Close should not be called directly called.
+	clientCleanup func() error
+}
+
+func (m *clientMgr) Close() error {
+	m.clientMux.Lock()
+	defer m.clientMux.Unlock()
+
+	if m.clientCleanup != nil {
+		return m.clientCleanup()
+	}
+	return nil
 }
 
 func (m *clientMgr) GetClient(ctx context.Context) (*ssh.Client, error) {
@@ -225,20 +294,17 @@ func (m *clientMgr) GetClient(ctx context.Context) (*ssh.Client, error) {
 					kat.Stop()
 
 					m.clientMux.Lock()
-					if m.client != nil && m.client == sshc {
-						client := m.client
-						cleanup := m.cleanup
-
-						m.client = nil
-						m.cleanup = nil
+					if keepAliveStopper.Err() != nil || m.client != sshc {
+						// Keep-alive loop already stopped or client was replaced, just unlock and return.
 						m.clientMux.Unlock()
-
-						client.Close()
-						cleanup()
-					} else {
-						// Client was already replaced, just unlock and continue with the new one.
-						m.clientMux.Unlock()
+						return
 					}
+					if err := m.clientCleanup(); err != nil {
+						log.Printf("Error during SSH client cleanup for jumphost %s: %v", m.Jumphost, err)
+					}
+					m.client = nil
+					m.clientCleanup = nil
+					m.clientMux.Unlock()
 					return
 				}
 			case <-keepAliveStopper.Done():
@@ -248,9 +314,12 @@ func (m *clientMgr) GetClient(ctx context.Context) (*ssh.Client, error) {
 	}()
 
 	m.client = sshc
-	m.cleanup = func() {
+	m.clientCleanup = func() error {
 		stopKeepAlive()
-		cleanupSSHC()
+		if err := cleanupSSHC(); err != nil {
+			return fmt.Errorf("error cleaning up SSH client for jumphost %s: %w", m.Jumphost, err)
+		}
+		return nil
 	}
 
 	return sshc, nil
@@ -341,23 +410,23 @@ type sshJump struct {
 }
 
 // TODO(bastjan) This is horrible AI code. Refactor to be more readable.
-func dialViaProxyJump(targetAddr string, targetConfig *ssh.ClientConfig, jumps []sshJump) (*ssh.Client, func(), error) {
+func dialViaProxyJump(targetAddr string, targetConfig *ssh.ClientConfig, jumps []sshJump) (*ssh.Client, func() error, error) {
 	if len(jumps) == 0 {
 		c, err := ssh.Dial("tcp", targetAddr, targetConfig)
 		if err != nil {
 			return nil, nil, fmt.Errorf("error connecting target %s: %w", targetAddr, err)
 		}
-		return c, func() {
-			_ = c.Close()
-		}, nil
+		return c, c.Close, nil
 	}
 
 	clients := make([]*ssh.Client, 0, len(jumps)+1)
 
-	closeAll := func() {
+	closeAll := func() error {
+		errs := make([]error, len(clients))
 		for i := len(clients) - 1; i >= 0; i-- {
-			_ = clients[i].Close()
+			errs[i] = clients[i].Close()
 		}
+		return multierr.Combine(errs...)
 	}
 
 	currentClient, err := ssh.Dial("tcp", jumps[0].Addr, jumps[0].Config)
@@ -369,15 +438,19 @@ func dialViaProxyJump(targetAddr string, targetConfig *ssh.ClientConfig, jumps [
 	for i := 1; i < len(jumps); i++ {
 		nextConn, err := currentClient.Dial("tcp", jumps[i].Addr)
 		if err != nil {
-			closeAll()
-			return nil, nil, fmt.Errorf("error dialing jump %d (%s): %w", i, jumps[i].Addr, err)
+			return nil, nil, multierr.Combine(
+				closeAll(),
+				fmt.Errorf("error dialing jump %d (%s): %w", i, jumps[i].Addr, err),
+			)
 		}
 
 		sshConn, chans, reqs, err := ssh.NewClientConn(nextConn, jumps[i].Addr, jumps[i].Config)
 		if err != nil {
-			_ = nextConn.Close()
-			closeAll()
-			return nil, nil, fmt.Errorf("error creating client for jump %d (%s): %w", i, jumps[i].Addr, err)
+			return nil, nil, multierr.Combine(
+				nextConn.Close(),
+				closeAll(),
+				fmt.Errorf("error creating client for jump %d (%s): %w", i, jumps[i].Addr, err),
+			)
 		}
 
 		currentClient = ssh.NewClient(sshConn, chans, reqs)
@@ -386,26 +459,25 @@ func dialViaProxyJump(targetAddr string, targetConfig *ssh.ClientConfig, jumps [
 
 	targetConn, err := currentClient.Dial("tcp", targetAddr)
 	if err != nil {
-		closeAll()
-		return nil, nil, fmt.Errorf("error dialing target %s through jumps: %w", targetAddr, err)
+		return nil, nil, multierr.Combine(
+			closeAll(),
+			fmt.Errorf("error dialing target %s through jumps: %w", targetAddr, err),
+		)
 	}
 
 	sshConn, chans, reqs, err := ssh.NewClientConn(targetConn, targetAddr, targetConfig)
 	if err != nil {
-		_ = targetConn.Close()
-		closeAll()
-		return nil, nil, fmt.Errorf("error creating ssh client for target %s: %w", targetAddr, err)
+		return nil, nil, multierr.Combine(
+			targetConn.Close(),
+			closeAll(),
+			fmt.Errorf("error creating ssh client for target %s: %w", targetAddr, err),
+		)
 	}
 
 	targetClient := ssh.NewClient(sshConn, chans, reqs)
 	clients = append(clients, targetClient)
 
-	var once sync.Once
-	cleanup := func() {
-		once.Do(closeAll)
-	}
-
-	return targetClient, cleanup, nil
+	return targetClient, closeAll, nil
 }
 
 func configForHost(sshConfig *ssh_config.UserSettings, host string, agent agent.ExtendedAgent) (string, *ssh.ClientConfig, error) {
