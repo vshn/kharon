@@ -45,6 +45,9 @@ type Proxy struct {
 }
 
 func (p *Proxy) Start(ctx context.Context, addr, mappingFile string) (err error) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	sshDialer, err := buildSSHDialer(p, mappingFile)
 	if err != nil {
 		return fmt.Errorf("failed to build SSH dialer: %w", err)
@@ -70,6 +73,7 @@ func (p *Proxy) Start(ctx context.Context, addr, mappingFile string) (err error)
 		return fmt.Errorf("failed to start listener: %w", err)
 	}
 	slog.Info("starting SOCKS5 server", slog.String("addr", listener.Addr().String()))
+	listener = &ConnCountingListener{Listener: listener}
 
 	eg, egCtx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
@@ -82,6 +86,28 @@ func (p *Proxy) Start(ctx context.Context, addr, mappingFile string) (err error)
 			return fmt.Errorf("SOCKS5 server error: %w", err)
 		}
 		return nil
+	})
+
+	ticker := time.NewTicker(10 * time.Second)
+	var imLiterallyGoingToExpireMyselfIfThisCounterReachesSix int
+	eg.Go(func() error {
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				if listener.(*ConnCountingListener).connCount.Load() == 0 {
+					imLiterallyGoingToExpireMyselfIfThisCounterReachesSix++
+				} else {
+					imLiterallyGoingToExpireMyselfIfThisCounterReachesSix = 0
+				}
+				if imLiterallyGoingToExpireMyselfIfThisCounterReachesSix >= 6 {
+					log.Print("no active connections for 1 minute, shutting down")
+					cancel()
+				}
+			case <-egCtx.Done():
+				return nil
+			}
+		}
 	})
 
 	return eg.Wait()
