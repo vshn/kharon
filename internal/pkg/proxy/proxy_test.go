@@ -9,7 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"maps"
 	"net"
 	"net/http"
@@ -462,7 +462,7 @@ func (s *mockSSHServer) handleSSHForwardingConnection(rawConn net.Conn, conf *ss
 
 	_, chans, reqs, err := ssh.NewServerConn(rawConn, conf)
 	if err != nil {
-		log.Printf("SSH handshake failed: %v", err)
+		slog.Error("SSH handshake failed", slog.Any("error", err))
 		return
 	}
 

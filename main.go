@@ -4,7 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -13,15 +13,19 @@ import (
 )
 
 func main() {
-	log.Print("What part of trying to connect to Kubernetes clusters is a fucking living?")
+	slog.Info("What part of trying to connect to Kubernetes clusters is a fucking living?")
 
 	var addr string
+	var verbosity int
 	flag.StringVar(&addr, "addr", "127.0.0.1:12000", "Address to bind the proxy to in the format <host>:<port>. If port is set to 0, a random free port will be used.")
+	flag.IntVar(&verbosity, "v", 0, "Verbosity level for logging. Lower values produce more detailed logs. Default is 0 (info). See https://pkg.go.dev/log/slog#Level for thresholds.")
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: %s [options] mapping_file.json\n", os.Args[0])
 		flag.PrintDefaults()
 	}
 	flag.Parse()
+
+	slog.SetLogLoggerLevel(slog.Level(verbosity))
 
 	mappingFile := flag.Arg(0)
 	if mappingFile == "" {
@@ -39,14 +43,15 @@ func main() {
 	defer signal.Stop(sighup)
 	go func() {
 		for range sighup {
-			log.Print("Received SIGHUP, reloading configuration...")
+			slog.Info("Received SIGHUP, reloading configuration...")
 			if err := proxy.Reload(mappingFile); err != nil {
-				log.Printf("Failed to reload configuration: %v", err)
+				slog.Error("Failed to reload configuration", slog.Any("error", err))
 			}
 		}
 	}()
 
 	if err := proxy.Start(ctx, addr, mappingFile); err != nil {
-		log.Fatalf("Failed to start proxy: %v", err)
+		slog.Error("Failed to start proxy", slog.Any("error", err))
+		os.Exit(1)
 	}
 }
