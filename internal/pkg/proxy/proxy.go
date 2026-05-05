@@ -175,7 +175,9 @@ func buildSSHDialer(p *Proxy, mappingFile string) (*sshDialer, error) {
 
 	// TODO(bastjan) This can in theory be different for different jumphosts, but let's assume it's the same for all of them for now.
 	// We can always add support for per-jumphost agent sockets later if needed.
-	agentSock, err := sshConfig.GetStrict("6372ffc2-9466-4e89-b60d-14307aa583a5.internal.smart-connect.io", "IdentityAgent")
+	// It's just a random hostname that is very unlikely to be used in the SSH config,
+	// we should get the default value for IdentityAgent without accidentally picking up a real host's config.
+	agentSock, err := sshConfig.GetStrict("6372ffc2-9466-4e89-b60d-14307aa583a5.internal.kharon.vshn.io", "IdentityAgent")
 	if err != nil {
 		return nil, fmt.Errorf("SSH_AUTH_SOCK is not a valid socket: %w", err)
 	}
