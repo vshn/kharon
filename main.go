@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"flag"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -13,10 +15,19 @@ import (
 func main() {
 	log.Print("What part of trying to connect to Kubernetes clusters is a fucking living?")
 
-	if len(os.Args) < 2 {
-		log.Fatalf("Usage: %s mapping_file.json", os.Args[0])
+	var addr string
+	flag.StringVar(&addr, "addr", "127.0.0.1:12000", "Address to bind the proxy to in the format <host>:<port>. If port is set to 0, a random free port will be used.")
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage: %s [options] mapping_file.json\n", os.Args[0])
+		flag.PrintDefaults()
 	}
-	mappingFile := os.Args[1]
+	flag.Parse()
+
+	mappingFile := flag.Arg(0)
+	if mappingFile == "" {
+		flag.Usage()
+		os.Exit(1)
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
@@ -35,7 +46,7 @@ func main() {
 		}
 	}()
 
-	if err := proxy.Start(ctx, "127.0.0.1:12000", mappingFile); err != nil {
+	if err := proxy.Start(ctx, addr, mappingFile); err != nil {
 		log.Fatalf("Failed to start proxy: %v", err)
 	}
 }

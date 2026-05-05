@@ -41,5 +41,5 @@ clean: ## Cleans up the generated resources
 	rm -rf cover.out $(BIN_FILENAME) ||:
 
 .PHONY: run
-run: build ## Run a controller from your host.
-	./$(BIN_FILENAME) domain_jumphost_mapping.json
+run: build ## Starts the proxy server on a random port with the provided mapping file
+	./$(BIN_FILENAME) -addr 127.0.0.1:0 domain_jumphost_mapping.json

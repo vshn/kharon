@@ -63,11 +63,11 @@ func (p *Proxy) Start(ctx context.Context, addr, mappingFile string) (err error)
 			return p.dialer.Load().dial(ctx, network, addr)
 		},
 	}
-	log.Printf("starting SOCKS5 server on %s", addr)
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
 		return fmt.Errorf("failed to start listener: %w", err)
 	}
+	log.Printf("starting SOCKS5 server on %s", listener.Addr())
 
 	eg, egCtx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
