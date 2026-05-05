@@ -9,15 +9,29 @@
 	<key>ProgramArguments</key>
 	<array>
 		<string>/Users/USER/workspace/kharon/kharon</string>
+		<string>-on-demand=launchd=Proxy</string>
+		<string>-v=-10</string>
 		<string>/Users/USER/workspace/kharon/domain_jumphost_mapping.json</string>
 	</array>
-	<key>KeepAlive</key>
-	<true/>
 	<key>StandardOutPath</key>
 	<string>/Users/USER/Library/Logs/io.vshn.Kharon.out.log</string>
 	<key>StandardErrorPath</key>
 	<string>/Users/USER/Library/Logs/io.vshn.Kharon.err.log</string>
 	<key>ProcessType</key>
 	<string>Interactive</string>
+	<key>Sockets</key>
+	<dict>
+		<key>Proxy</key>
+		<dict>
+			<key>SockNodeName</key>
+			<string>localhost</string>
+			<key>SockServiceName</key>
+			<string>12000</string>
+			<key>SockType</key>
+			<string>stream</string>
+			<key>SockFamily</key>
+			<string>IPv4v6</string>
+		</dict>
+	</dict>
 </dict>
 </plist>

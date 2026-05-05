@@ -44,7 +44,7 @@ type Proxy struct {
 	dialer atomic.Pointer[sshDialer]
 }
 
-func (p *Proxy) Start(ctx context.Context, addr, mappingFile string) (err error) {
+func (p *Proxy) Start(ctx context.Context, lp func() (net.Listener, error), mappingFile string) (err error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -68,9 +68,9 @@ func (p *Proxy) Start(ctx context.Context, addr, mappingFile string) (err error)
 			return p.dialer.Load().dial(ctx, network, addr)
 		},
 	}
-	listener, err := net.Listen("tcp", addr)
+	listener, err := lp()
 	if err != nil {
-		return fmt.Errorf("failed to start listener: %w", err)
+		return fmt.Errorf("failed to get listener: %w", err)
 	}
 	slog.Info("starting SOCKS5 server", slog.String("addr", listener.Addr().String()))
 	listener = &ConnCountingListener{Listener: listener}
@@ -101,7 +101,7 @@ func (p *Proxy) Start(ctx context.Context, addr, mappingFile string) (err error)
 					imLiterallyGoingToExpireMyselfIfThisCounterReachesSix = 0
 				}
 				if imLiterallyGoingToExpireMyselfIfThisCounterReachesSix >= 6 {
-					log.Print("no active connections for 1 minute, shutting down")
+					slog.Info("no active connections for 1 minute, shutting down")
 					cancel()
 				}
 			case <-egCtx.Done():

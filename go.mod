@@ -3,6 +3,7 @@ module github.com/vshn/kharon
 go 1.26.1
 
 require (
+	github.com/bored-engineer/go-launchd v0.0.0-20241220214420-b514778f4f80
 	github.com/foxcpp/go-mockdns v1.2.0
 	github.com/kevinburke/ssh_config v1.6.0
 	github.com/stretchr/testify v1.11.1

@@ -216,7 +216,7 @@ func Test_Start(t *testing.T) {
 	}
 	wg, wgCtx := errgroup.WithContext(ctx)
 	wg.Go(func() error {
-		return p.Start(wgCtx, proxyAddr, mappingPath)
+		return p.Start(wgCtx, func() (net.Listener, error) { return net.Listen("tcp", proxyAddr) }, mappingPath)
 	})
 
 	httpClient := newHTTPClient(proxyAddr, httpServer.Listener.Addr().(*net.TCPAddr).Port)
