@@ -72,7 +72,9 @@ jobs:
           # PreReleases still get a changelog, but the next full release gets a diff since the last full release,
           # combining possible changelogs of all previous PreReleases in between.
           # PreReleases show a partial changelog since last PreRelease.
-          ignorePreReleases: "${{ !contains(github.ref, '-rc') }}"
+          # It is assumed that PreReleases have a '-' in their tag name, e.g. 'v1.0.0-alpha.1'.
+          # `github.ref` is in the format of 'refs/tags/v1.0.0-alpha.1' for tags.
+          ignorePreReleases: "${{ !contains(github.ref, '-') }}"
           outputFile: .github/release-notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -81,8 +83,9 @@ jobs:
         uses: ncipollo/release-action@v1
         with:
           body: ${{steps.build_changelog.outputs.changelog}}
-          prerelease: "${{ contains(github.ref, '-rc') }}"
-          # Ensure target branch for release is "main"
+          # It is assumed that PreReleases have a '-' in their tag name, e.g. 'v1.0.0-alpha.1'.
+          # `github.ref` is in the format of 'refs/tags/v1.0.0-alpha.1' for tags.
+          prerelease: "${{ contains(github.ref, '-') }}"
           commit: main
           token: ${{ secrets.GITHUB_TOKEN }}
           artifacts: dist/*
