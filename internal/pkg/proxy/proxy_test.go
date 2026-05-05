@@ -10,12 +10,14 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"maps"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -115,12 +117,14 @@ func Test_Start(t *testing.T) {
 	localDNSResolver := localhostResolverFor(t, "no.hop", "one.hop")
 	dmz2DNSResolver := localhostResolverFor(t, "two.hops", "jumphost3")
 	dmz3DNSResolver := localhostResolverFor(t, "three.hops")
+	dmz4DNSResolver := localhostResolverFor(t, "after.reload")
 
 	allowedPubKey, err := ssh.NewPublicKey(userPubKey)
 	require.NoError(t, err)
 	jumpHost1 := spawnForwardingSSHServer(t, allowedPubKey, net.Dialer{Resolver: localDNSResolver})
 	jumpHost2 := spawnForwardingSSHServer(t, allowedPubKey, net.Dialer{Resolver: dmz2DNSResolver})
 	jumpHost3 := spawnForwardingSSHServer(t, allowedPubKey, net.Dialer{Resolver: dmz3DNSResolver})
+	jumpHost4 := spawnForwardingSSHServer(t, allowedPubKey, net.Dialer{Resolver: dmz4DNSResolver})
 	knownHostsPath := writeKnownHostsFile(t, knownHostEntry{
 		hostname: "127.0.0.1",
 		port:     jumpHost1.Port(),
@@ -133,6 +137,10 @@ func Test_Start(t *testing.T) {
 		hostname: "jumphost3",
 		port:     jumpHost3.Port(),
 		hostKey:  jumpHost3.HostKey(),
+	}, knownHostEntry{
+		hostname: "jumphost4",
+		port:     jumpHost4.Port(),
+		hostKey:  jumpHost4.HostKey(),
 	})
 
 	mappingPath := filepath.Join(t.TempDir(), "mapping.json")
@@ -140,34 +148,44 @@ func Test_Start(t *testing.T) {
 		"one.hop":    "jumphost1",
 		"two.hops":   "jumphost2",
 		"three.hops": "jumphost3",
+		"error.hop":  "nonexistent.jumphost",
 	}), 0o600))
 
 	sshConfigPath := filepath.Join(t.TempDir(), "ssh_config")
-	require.NoError(t, os.WriteFile(sshConfigPath, []byte(fmt.Sprintf(`
-Host *
-	IdentityAgent %s
-	UserKnownHostsFile %s
-	User test
-
-Host jumphost1
-	HostName 127.0.0.1
-	Port %d
-
-Host jumphost2
-	HostName 127.0.0.1
-	HostKeyAlias jumphost2
-	ProxyJump jumphost1
-	Port %d
-
-Host jumphost3
-	ProxyJump jumphost2
-	Port %d
-`, agentSocket, knownHostsPath, jumpHost1.Port(), jumpHost2.Port(), jumpHost3.Port())), 0o600))
-
-	u := &ssh_config.UserSettings{}
-	u.ConfigFinder(func() string {
-		return sshConfigPath
-	})
+	b := sshConfigBuilder{
+		{
+			Block: "Host *",
+			Options: map[string]string{
+				"IdentityAgent":      agentSocket,
+				"UserKnownHostsFile": knownHostsPath,
+				"User":               "test",
+			},
+		},
+		{
+			Block: "Host jumphost1",
+			Options: map[string]string{
+				"HostName": "127.0.0.1",
+				"Port":     fmt.Sprintf("%d", jumpHost1.Port()),
+			},
+		},
+		{
+			Block: "Host jumphost2",
+			Options: map[string]string{
+				"HostName":     "127.0.0.1",
+				"HostKeyAlias": "jumphost2",
+				"ProxyJump":    "jumphost1",
+				"Port":         strconv.Itoa(jumpHost2.Port()),
+			},
+		},
+		{
+			Block: "Host jumphost3",
+			Options: map[string]string{
+				"ProxyJump": "jumphost2",
+				"Port":      strconv.Itoa(jumpHost3.Port()),
+			},
+		},
+	}
+	require.NoError(t, os.WriteFile(sshConfigPath, []byte(b.String()), 0o600))
 
 	httpServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		io.Copy(io.Discard, r.Body)
@@ -183,15 +201,21 @@ Host jumphost3
 	proxyPort, err := freePort()
 	require.NoError(t, err, "failed to find free port for proxy")
 	proxyAddr := net.JoinHostPort("127.0.0.1", strconv.Itoa(proxyPort))
+	p := Proxy{
+		SSHConfig: func() *ssh_config.UserSettings {
+			u := &ssh_config.UserSettings{}
+			u.ConfigFinder(func() string {
+				return sshConfigPath
+			})
+			return u
+		},
+		DirectDialer: net.Dialer{
+			Resolver: localDNSResolver,
+		},
+		KeepAliveInterval: 100 * time.Millisecond,
+	}
 	wg, wgCtx := errgroup.WithContext(ctx)
 	wg.Go(func() error {
-		p := Proxy{
-			SSHConfig: u,
-			DirectDialer: net.Dialer{
-				Resolver: localDNSResolver,
-			},
-			KeepAliveInterval: 100 * time.Millisecond,
-		}
 		return p.Start(wgCtx, proxyAddr, mappingPath)
 	})
 
@@ -220,10 +244,47 @@ Host jumphost3
 	jumpHost3.UnblockKeepAlives()
 	ev.requireEventuallyWithT(t, func(t *assert.CollectT) {
 		httpClient.RequireSuccessfulGet(t, "http://three.hops")
-	}, "proxy did not start in time")
+	}, "expected to be able to connect to three.hops again after unblocking keep-alives")
+
+	{
+		fr := httpClient.RequireNewRequest(t, http.MethodGet, "http://error.hop", nil)
+		_, err := httpClient.client.Do(fr)
+		require.Error(t, err, "expected request to error.hop to fail before adding jumphost4 and reloading proxy")
+	}
+
+	{
+		fr := httpClient.RequireNewRequest(t, http.MethodGet, "http://after.reload", nil)
+		_, err := httpClient.client.Do(fr)
+		require.Error(t, err, "expected request to after.reload to fail before adding jumphost4 and reloading proxy")
+	}
+
+	b[3] = sshConfigBlock{
+		Block: "Host jumphost4",
+		Options: map[string]string{
+			"Port":         strconv.Itoa(jumpHost4.Port()),
+			"HostKeyAlias": "jumphost4",
+			"ProxyCommand": fmt.Sprintf("ssh -W 127.0.0.1:%d -- %s", jumpHost4.Port(), "jumphost1"),
+		},
+	}
+	require.NoError(t, os.WriteFile(sshConfigPath, []byte(b.String()), 0o600))
+
+	require.NoError(t, os.WriteFile(mappingPath, requireJSONMarshal(t, map[string]string{
+		"one.hop":      "jumphost1",
+		"two.hops":     "jumphost2",
+		"three.hops":   "jumphost3",
+		"after.reload": "jumphost4",
+	}), 0o600), "failed to update hostname mapping")
+
+	require.NoError(t, p.Reload(mappingPath), "failed to reload proxy with updated SSH config and hostname mapping")
+
+	ev.requireEventuallyWithT(t, func(t *assert.CollectT) {
+		httpClient.RequireSuccessfulGet(t, "http://after.reload")
+	}, "expected to be able to connect to after.reload after reloading SSH config with new jumphost")
 
 	cancel()
 	require.NoError(t, wg.Wait())
+
+	require.ErrorContains(t, p.Reload(mappingPath), "proxy is not running")
 }
 
 type eventuallyDefaults struct {
@@ -254,15 +315,21 @@ func newHTTPClient(proxyAddr string, httpServerPort int) *httpClient {
 	}
 }
 
-// RequireSuccessfulGet performs a GET request to the given URL and requires that it succeeds with a 2xx status code.
-// It auto-injects the port of the test HTTP server into the URL and uses the client's SOCKS5 proxy configuration to perform the request.
-func (c *httpClient) RequireSuccessfulGet(t require.TestingT, urlStr string) {
+func (c *httpClient) RequireNewRequest(t require.TestingT, method, urlStr string, body io.Reader) *http.Request {
 	u, err := url.Parse(urlStr)
 	require.NoError(t, err)
 	u.Host = net.JoinHostPort(u.Hostname(), strconv.Itoa(c.httpServerPort))
 
-	httpReq, err := http.NewRequestWithContext(context.Background(), "GET", u.String(), nil)
+	httpReq, err := http.NewRequestWithContext(context.TODO(), method, u.String(), body)
 	require.NoError(t, err)
+	return httpReq
+}
+
+// RequireSuccessfulGet performs a GET request to the given URL and requires that it succeeds with a 2xx status code.
+// It auto-injects the port of the test HTTP server into the URL and uses the client's SOCKS5 proxy configuration to perform the request.
+func (c *httpClient) RequireSuccessfulGet(t require.TestingT, urlStr string) {
+	httpReq := c.RequireNewRequest(t, http.MethodGet, urlStr, nil)
+
 	resp, err := c.client.Do(httpReq)
 	require.NoError(t, err)
 	io.Copy(io.Discard, resp.Body)
@@ -540,3 +607,24 @@ func spawnSSHAgent(t *testing.T) (pub ed25519.PublicKey, socketPath string) {
 type nopLogger struct{}
 
 func (l *nopLogger) Printf(format string, args ...interface{}) {}
+
+type sshConfigBuilder []sshConfigBlock
+
+type sshConfigBlock struct {
+	Block   string
+	Options map[string]string
+}
+
+func (b sshConfigBuilder) String() string {
+	var sb strings.Builder
+	for _, block := range b {
+		sb.WriteString(block.Block)
+		sb.WriteString("\n")
+		for _, k := range slices.Sorted(maps.Keys(block.Options)) {
+			v := block.Options[k]
+			fmt.Fprintf(&sb, "\t%s %s\n", k, v)
+		}
+		sb.WriteString("\n")
+	}
+	return sb.String()
+}
