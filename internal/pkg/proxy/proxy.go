@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
 	"os"
 	"path/filepath"
@@ -57,9 +57,11 @@ func (p *Proxy) Start(ctx context.Context, addr, mappingFile string) (err error)
 	}()
 
 	socks5Server := &socks5.Server{
-		Logf: log.Printf,
+		Logf: func(format string, args ...any) {
+			slog.Error(fmt.Sprintf(format, args...))
+		},
 		Dialer: func(ctx context.Context, network, addr string) (net.Conn, error) {
-			log.Printf("New SOCKS5 connection %s://%s", network, addr)
+			slog.Debug("New SOCKS5 connection", slog.String("network", network), slog.String("addr", addr))
 			return p.dialer.Load().dial(ctx, network, addr)
 		},
 	}
@@ -67,12 +69,12 @@ func (p *Proxy) Start(ctx context.Context, addr, mappingFile string) (err error)
 	if err != nil {
 		return fmt.Errorf("failed to start listener: %w", err)
 	}
-	log.Printf("starting SOCKS5 server on %s", listener.Addr())
+	slog.Info("starting SOCKS5 server", slog.String("addr", listener.Addr().String()))
 
 	eg, egCtx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
 		<-egCtx.Done()
-		log.Print("shutting down SOCKS5 server")
+		slog.Info("shutting down SOCKS5 server")
 		return listener.Close()
 	})
 	eg.Go(func() error {
@@ -134,7 +136,7 @@ func loadHostnameMapping(mappingFile string) ([]hostSuffixJumphostMapping, error
 	slices.SortFunc(hostnameMapping, func(a, b hostSuffixJumphostMapping) int {
 		return 10*(len(b.HostSuffix)-len(a.HostSuffix)) + strings.Compare(a.HostSuffix, b.HostSuffix)
 	})
-	log.Printf("Loaded %v hostname mappings", len(hostnameMapping))
+	slog.Info("Loaded hostname mappings", slog.Int("count", len(hostnameMapping)))
 	return hostnameMapping, nil
 }
 
@@ -195,7 +197,7 @@ func buildSSHDialer(p *Proxy, mappingFile string) (*sshDialer, error) {
 		}
 		agentSock = socket
 	}
-	log.Printf("Using SSH agent socket: %s", agentSock)
+	slog.Info("Using SSH agent socket", slog.String("path", agentSock))
 	sshAgentConn, err := net.Dial("unix", agentSock)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open SSH_AUTH_SOCK: %w", err)
@@ -265,7 +267,7 @@ func (m *clientMgr) GetClient(ctx context.Context) (*ssh.Client, error) {
 		return nil, fmt.Errorf("error getting jumphost chain for %s: %w", m.Jumphost, err)
 	}
 
-	log.Printf("New connection to %s", strings.Join(jumphosts, "->"))
+	slog.Info("New connection", slog.String("chain", strings.Join(jumphosts, "->")))
 	configs := make([]sshJump, 0, len(jumphosts))
 	for _, jh := range jumphosts {
 		jhAddr, jhConfig, err := configForHost(m.SSHSettings, jh, m.Agent)
@@ -292,7 +294,7 @@ func (m *clientMgr) GetClient(ctx context.Context) (*ssh.Client, error) {
 			select {
 			case <-kat.C:
 				if err := sendKeepAlive(sshc, m.KeepAliveInterval); err != nil {
-					log.Printf("SSH keepalive failed for jumphost %s: %v", m.Jumphost, err)
+					slog.Warn("SSH keepalive failed", slog.String("jumphost", m.Jumphost), slog.Any("error", err))
 					kat.Stop()
 
 					m.clientMux.Lock()
@@ -302,7 +304,7 @@ func (m *clientMgr) GetClient(ctx context.Context) (*ssh.Client, error) {
 						return
 					}
 					if err := m.clientCleanup(); err != nil {
-						log.Printf("Error during SSH client cleanup for jumphost %s: %v", m.Jumphost, err)
+						slog.Error("Error during SSH client cleanup", slog.String("jumphost", m.Jumphost), slog.Any("error", err))
 					}
 					m.client = nil
 					m.clientCleanup = nil
@@ -365,9 +367,9 @@ func (d *sshDialer) jumphostForHost(hostname string) string {
 	d.routes.Store(hostname, jumphost)
 
 	if jumphost == "" {
-		log.Printf("⌥ %s is a direct connection", hostname)
+		slog.Debug("Direct connection", slog.String("hostname", hostname))
 	} else {
-		log.Printf("⌥ %s mapped to jumphost %s", hostname, jumphost)
+		slog.Info("Domain mapped to jumphost", slog.String("hostname", hostname), slog.String("jumphost", jumphost))
 	}
 
 	return jumphost
@@ -500,14 +502,14 @@ func configForHost(sshConfig *ssh_config.UserSettings, host string, agent agent.
 		}
 		if _, err := os.Stat(akhf); err != nil {
 			if os.IsNotExist(err) {
-				log.Printf("Warning: UserKnownHostsFile %s does not exist, skipping", akhf)
+				slog.Warn("UserKnownHostsFile does not exist, skipping", slog.String("path", akhf))
 				continue
 			}
 			return "", nil, fmt.Errorf("error statting UserKnownHostsFile %s: %w", akhf, err)
 		}
 		akhfs = append(akhfs, akhf)
 	}
-	log.Printf("Using known hosts files for host %s: %s", host, strings.Join(akhfs, ", "))
+	slog.Info("Using known hosts files for host", slog.String("host", host), slog.String("files", strings.Join(akhfs, ", ")))
 	knownHosts, err := knownhosts.New(akhfs...)
 	if err != nil {
 		return "", nil, fmt.Errorf("error creating knownhosts callback for host %s: %w", host, err)
@@ -530,12 +532,12 @@ func configForHost(sshConfig *ssh_config.UserSettings, host string, agent agent.
 			return "", nil, fmt.Errorf("error getting ProxyCommand for host %s: %w", host, err)
 		}
 		if proxyCommand != "" {
-			log.Printf("Fallback to ProxyCommand for HostName %s: %s", host, proxyCommand)
+			slog.Debug("Fallback to ProxyCommand for HostName", slog.String("host", host), slog.String("proxy_command", proxyCommand))
 			extractedHostName, _, _, err := parseProxyCommand(proxyCommand)
 			if err != nil {
 				return "", nil, fmt.Errorf("error parsing ProxyCommand for host %s: %w", host, err)
 			}
-			log.Printf("Extracted HostName from ProxyCommand for host %s: %s", host, extractedHostName)
+			slog.Debug("Extracted HostName from ProxyCommand", slog.String("host", host), slog.String("host_name", extractedHostName))
 			hostName = extractedHostName
 		} else {
 			hostName = host
@@ -583,12 +585,12 @@ func jumphostChainForTarget(conf *ssh_config.UserSettings, host string) ([]strin
 			if pc == "" {
 				break
 			}
-			log.Printf("Fallback to ProxyCommand for host %s: %s", host, pc)
+			slog.Debug("Fallback to ProxyCommand for ProxyJump", slog.String("host", host), slog.String("proxy_command", pc))
 			_, _, extracted, err := parseProxyCommand(pc)
 			if err != nil {
 				return nil, fmt.Errorf("error parsing ProxyCommand for host %s: %w", host, err)
 			}
-			log.Printf("Extracted jumphost from ProxyCommand for host %s: %s", host, extracted)
+			slog.Debug("Extracted jumphost from ProxyCommand", slog.String("host", host), slog.String("jumphost", extracted))
 			jump = extracted
 		}
 		if strings.Contains(jump, ",") {
