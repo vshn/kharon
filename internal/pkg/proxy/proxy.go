@@ -102,12 +102,12 @@ func (p *Proxy) Start(ctx context.Context, lp func() (net.Listener, error), mapp
 				select {
 				case <-ticker.C:
 					c := listener.(*ConnCountingListener).connCount.Load()
-					slog.Debug("active connections", slog.Int64("count", c), slog.Int("shutdown_counter", counter), slog.Int("shutdown_after", probes))
 					if c == 0 {
 						counter++
 					} else {
 						counter = 0
 					}
+					slog.Debug("Active connections", slog.Int64("count", c), slog.Int("shutdown_counter", counter), slog.Int("shutdown_at", probes))
 					if counter >= probes {
 						slog.Info("no active connections within shutdown timeout, shutting down", slog.Duration("shutdown_timeout", p.ShutdownTimeout))
 						cancel()
