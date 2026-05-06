@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/vshn/kharon/internal/pkg/activation"
 	"github.com/vshn/kharon/internal/pkg/proxy"
@@ -20,8 +21,10 @@ func main() {
 
 	var addr, onDemand string
 	var verbosity int
+	var onDemandShutdownTimeout time.Duration
 	flag.StringVar(&addr, "addr", "127.0.0.1:12000", "Address to bind the proxy to in the format <host>:<port>. If port is set to 0, a random free port will be used.")
-	flag.StringVar(&onDemand, "on-demand", "", "On-demand allows the proxy to start from launchd or systemd when a connection is attempted. Value can be '-on-demand=launchd=<SocketName>' or '-on-demand=systemd=<my-socket.socket>'.")
+	flag.StringVar(&onDemand, "on-demand", "", "On-demand allows the proxy to start from launchd or systemd when a connection is attempted. Value can be '-on-demand=launchd=<SocketName>' or '-on-demand=systemd=<my-socket.socket>'. The proxy will shut down after the specified timeout when no active connections are present.")
+	flag.DurationVar(&onDemandShutdownTimeout, "on-demand-shutdown-timeout", 3*time.Minute, "Timeout for shutting down the proxy when no active connections are present in on-demand mode. Zero disables automatic shutdown.")
 	flag.IntVar(&verbosity, "v", 0, "Verbosity level for logging. Lower values produce more detailed logs. Default is 0 (info). See https://pkg.go.dev/log/slog#Level for thresholds.")
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: %s [options] mapping_file.json\n", os.Args[0])
@@ -40,7 +43,9 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
-	var proxy proxy.Proxy
+	proxy := proxy.Proxy{
+		ShutdownTimeout: onDemandShutdownTimeout,
+	}
 
 	sighup := make(chan os.Signal, 1)
 	signal.Notify(sighup, syscall.SIGHUP)

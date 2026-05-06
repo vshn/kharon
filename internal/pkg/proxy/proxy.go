@@ -40,6 +40,10 @@ type Proxy struct {
 	// Defaults to 3 seconds if not set.
 	KeepAliveInterval time.Duration
 
+	// ShutdownTimeout is the timeout for shutting down the proxy when no active connections are present.
+	// A zero value means that the proxy will not shut down automatically.
+	ShutdownTimeout time.Duration
+
 	// dialer is the current dialer to use for incoming connections. It is stored atomically so that it can be replaced on the fly when reloading the configuration.
 	dialer atomic.Pointer[sshDialer]
 }
@@ -88,27 +92,32 @@ func (p *Proxy) Start(ctx context.Context, lp func() (net.Listener, error), mapp
 		return nil
 	})
 
-	ticker := time.NewTicker(10 * time.Second)
-	var imLiterallyGoingToExpireMyselfIfThisCounterReachesSix int
-	eg.Go(func() error {
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				if listener.(*ConnCountingListener).connCount.Load() == 0 {
-					imLiterallyGoingToExpireMyselfIfThisCounterReachesSix++
-				} else {
-					imLiterallyGoingToExpireMyselfIfThisCounterReachesSix = 0
+	if p.ShutdownTimeout > 0 {
+		const probes = 10
+		ticker := time.NewTicker(p.ShutdownTimeout / probes)
+		var counter int
+		eg.Go(func() error {
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ticker.C:
+					c := listener.(*ConnCountingListener).connCount.Load()
+					slog.Debug("active connections", slog.Int64("count", c), slog.Int("shutdown_counter", counter), slog.Int("shutdown_after", probes))
+					if c == 0 {
+						counter++
+					} else {
+						counter = 0
+					}
+					if counter >= probes {
+						slog.Info("no active connections within shutdown timeout, shutting down", slog.Duration("shutdown_timeout", p.ShutdownTimeout))
+						cancel()
+					}
+				case <-egCtx.Done():
+					return nil
 				}
-				if imLiterallyGoingToExpireMyselfIfThisCounterReachesSix >= 6 {
-					slog.Info("no active connections for 1 minute, shutting down")
-					cancel()
-				}
-			case <-egCtx.Done():
-				return nil
 			}
-		}
-	})
+		})
+	}
 
 	return eg.Wait()
 }

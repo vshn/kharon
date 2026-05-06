@@ -198,9 +198,6 @@ func Test_Start(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
-	proxyPort, err := freePort()
-	require.NoError(t, err, "failed to find free port for proxy")
-	proxyAddr := net.JoinHostPort("127.0.0.1", strconv.Itoa(proxyPort))
 	p := Proxy{
 		SSHConfig: func() *ssh_config.UserSettings {
 			u := &ssh_config.UserSettings{}
@@ -214,9 +211,12 @@ func Test_Start(t *testing.T) {
 		},
 		KeepAliveInterval: 100 * time.Millisecond,
 	}
+	pl, err := net.Listen("tcp", "127.0.0.1:0")
+	proxyAddr := pl.Addr().String()
+	require.NoError(t, err, "failed to listen for proxy")
 	wg, wgCtx := errgroup.WithContext(ctx)
 	wg.Go(func() error {
-		return p.Start(wgCtx, func() (net.Listener, error) { return net.Listen("tcp", proxyAddr) }, mappingPath)
+		return p.Start(wgCtx, func() (net.Listener, error) { return pl, nil }, mappingPath)
 	})
 
 	httpClient := newHTTPClient(proxyAddr, httpServer.Listener.Addr().(*net.TCPAddr).Port)
@@ -285,6 +285,84 @@ func Test_Start(t *testing.T) {
 	require.NoError(t, wg.Wait())
 
 	require.ErrorContains(t, p.Reload(mappingPath), "proxy is not running")
+}
+
+func Test_Start_AutomaticShutdown(t *testing.T) {
+	ev := eventuallyDefaults{waitFor: 5 * time.Second, interval: 100 * time.Millisecond}
+
+	userPubKey, agentSocket := spawnSSHAgent(t)
+	t.Logf("Spawned SSH agent with public key %x at socket %s", userPubKey, agentSocket)
+
+	localDNSResolver := localhostResolverFor(t, "no.hop")
+
+	mappingPath := filepath.Join(t.TempDir(), "mapping.json")
+	require.NoError(t, os.WriteFile(mappingPath, []byte("{}"), 0o600))
+
+	sshConfigPath := filepath.Join(t.TempDir(), "ssh_config")
+	b := sshConfigBuilder{
+		{
+			Block: "Host *",
+			Options: map[string]string{
+				"IdentityAgent": agentSocket,
+			},
+		},
+	}
+	require.NoError(t, os.WriteFile(sshConfigPath, []byte(b.String()), 0o600))
+
+	httpServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.Copy(io.Discard, r.Body)
+		r.Body.Close()
+		w.Header().Set("X-Request-Host", r.Host)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer httpServer.Close()
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	p := Proxy{
+		SSHConfig: func() *ssh_config.UserSettings {
+			u := &ssh_config.UserSettings{}
+			u.ConfigFinder(func() string {
+				return sshConfigPath
+			})
+			return u
+		},
+		DirectDialer: net.Dialer{
+			Resolver: localDNSResolver,
+		},
+		ShutdownTimeout: 500 * time.Millisecond,
+	}
+	pl, err := net.Listen("tcp", "127.0.0.1:0")
+	proxyAddr := pl.Addr().String()
+	require.NoError(t, err, "failed to listen for proxy")
+	wg, wgCtx := errgroup.WithContext(ctx)
+	wg.Go(func() error {
+		return p.Start(wgCtx, func() (net.Listener, error) { return pl, nil }, mappingPath)
+	})
+
+	httpClient := newHTTPClient(proxyAddr, httpServer.Listener.Addr().(*net.TCPAddr).Port)
+	ev.requireEventuallyWithT(t, func(t *assert.CollectT) {
+		httpClient.RequireSuccessfulGet(t, "http://no.hop")
+	}, "proxy did not start in time")
+
+	httpClient.client.CloseIdleConnections()
+
+	var shutdownWait errgroup.Group
+	shutdownWait.Go(func() error {
+		timeout := 2 * time.Second
+		done := make(chan error, 1)
+		go func() {
+			done <- wg.Wait()
+		}()
+		select {
+		case err := <-done:
+			return err
+		case <-time.After(timeout):
+			return fmt.Errorf("proxy did not shut down within %s after idle connections were closed", timeout)
+		}
+	})
+	require.NoError(t, shutdownWait.Wait())
 }
 
 type eventuallyDefaults struct {
@@ -530,20 +608,6 @@ func (s *mockSSHServer) handleSSHForwardingConnection(rawConn net.Conn, conf *ss
 			<-errCh
 		}()
 	}
-}
-
-// freePort returns a free port on the host.
-func freePort() (int, error) {
-	a, err := net.ResolveTCPAddr("tcp", ":0")
-	if err != nil {
-		return 0, err
-	}
-	l, err := net.ListenTCP("tcp", a)
-	if err != nil {
-		return 0, err
-	}
-	defer l.Close()
-	return l.Addr().(*net.TCPAddr).Port, nil
 }
 
 // localhostResolverFor returns a net.Resolver that resolves the given hosts to localhost.
