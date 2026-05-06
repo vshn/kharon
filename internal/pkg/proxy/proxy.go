@@ -40,11 +40,18 @@ type Proxy struct {
 	// Defaults to 3 seconds if not set.
 	KeepAliveInterval time.Duration
 
+	// ShutdownTimeout is the timeout for shutting down the proxy when no active connections are present.
+	// A zero value means that the proxy will not shut down automatically.
+	ShutdownTimeout time.Duration
+
 	// dialer is the current dialer to use for incoming connections. It is stored atomically so that it can be replaced on the fly when reloading the configuration.
 	dialer atomic.Pointer[sshDialer]
 }
 
-func (p *Proxy) Start(ctx context.Context, addr, mappingFile string) (err error) {
+func (p *Proxy) Start(ctx context.Context, lp func() (net.Listener, error), mappingFile string) (err error) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	sshDialer, err := buildSSHDialer(p, mappingFile)
 	if err != nil {
 		return fmt.Errorf("failed to build SSH dialer: %w", err)
@@ -65,11 +72,12 @@ func (p *Proxy) Start(ctx context.Context, addr, mappingFile string) (err error)
 			return p.dialer.Load().dial(ctx, network, addr)
 		},
 	}
-	listener, err := net.Listen("tcp", addr)
+	listener, err := lp()
 	if err != nil {
-		return fmt.Errorf("failed to start listener: %w", err)
+		return fmt.Errorf("failed to get listener: %w", err)
 	}
 	slog.Info("starting SOCKS5 server", slog.String("addr", listener.Addr().String()))
+	listener = &ConnCountingListener{Listener: listener}
 
 	eg, egCtx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
@@ -83,6 +91,33 @@ func (p *Proxy) Start(ctx context.Context, addr, mappingFile string) (err error)
 		}
 		return nil
 	})
+
+	if p.ShutdownTimeout > 0 {
+		const probes = 10
+		ticker := time.NewTicker(p.ShutdownTimeout / probes)
+		var counter int
+		eg.Go(func() error {
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ticker.C:
+					c := listener.(*ConnCountingListener).connCount.Load()
+					slog.Debug("active connections", slog.Int64("count", c), slog.Int("shutdown_counter", counter), slog.Int("shutdown_after", probes))
+					if c == 0 {
+						counter++
+					} else {
+						counter = 0
+					}
+					if counter >= probes {
+						slog.Info("no active connections within shutdown timeout, shutting down", slog.Duration("shutdown_timeout", p.ShutdownTimeout))
+						cancel()
+					}
+				case <-egCtx.Done():
+					return nil
+				}
+			}
+		})
+	}
 
 	return eg.Wait()
 }
