@@ -73,7 +73,7 @@ func main() {
 			lp = activation.LaunchdListener(opt)
 		case "systemd":
 			if !hasOpt {
-				slog.Error("systemd on-demand requires a socket name, e.g. '-on-demand=systemd=<my-socket.socket>'")
+				slog.Error("systemd on-demand requires a systemd socket unit name, e.g. '-on-demand=systemd=<my-socket.socket>'")
 				os.Exit(1)
 			}
 			lp = activation.SystemdListener(opt)
