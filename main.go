@@ -21,7 +21,7 @@ func main() {
 	var addr, onDemand string
 	var verbosity int
 	flag.StringVar(&addr, "addr", "127.0.0.1:12000", "Address to bind the proxy to in the format <host>:<port>. If port is set to 0, a random free port will be used.")
-	flag.StringVar(&onDemand, "on-demand", "", "On-demand allows the proxy to start from launchd or systemd when a connection is attempted. Value can be '-on-demand=launchd=<SocketName>' or '-on-demand=systemd=<SocketName>'.")
+	flag.StringVar(&onDemand, "on-demand", "", "On-demand allows the proxy to start from launchd or systemd when a connection is attempted. Value can be '-on-demand=launchd=<SocketName>' or '-on-demand=systemd=<my-socket.socket>'.")
 	flag.IntVar(&verbosity, "v", 0, "Verbosity level for logging. Lower values produce more detailed logs. Default is 0 (info). See https://pkg.go.dev/log/slog#Level for thresholds.")
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: %s [options] mapping_file.json\n", os.Args[0])
@@ -68,7 +68,7 @@ func main() {
 			lp = activation.LaunchdListener(opt)
 		case "systemd":
 			if !hasOpt {
-				slog.Error("systemd on-demand requires a socket name, e.g. '-on-demand=systemd=MySocket'")
+				slog.Error("systemd on-demand requires a socket name, e.g. '-on-demand=systemd=<my-socket.socket>'")
 				os.Exit(1)
 			}
 			lp = activation.SystemdListener(opt)

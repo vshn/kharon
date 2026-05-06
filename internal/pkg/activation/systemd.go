@@ -4,6 +4,7 @@ package activation
 
 import (
 	"fmt"
+	"log/slog"
 	"net"
 	"os"
 	"slices"
@@ -12,6 +13,7 @@ import (
 )
 
 func SystemdListener(name string) func() (net.Listener, error) {
+	slog.Debug("systemd socket activation", "socket_name", name, "LISTEN_FDNAMES", os.Getenv("LISTEN_FDNAMES"))
 	names := os.Getenv("LISTEN_FDNAMES")
 	if names == "" {
 		return func() (net.Listener, error) {
