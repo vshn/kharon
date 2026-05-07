@@ -4,17 +4,20 @@ go 1.26.2
 
 require (
 	github.com/bored-engineer/go-launchd v0.0.0-20241220214420-b514778f4f80
+	github.com/coreos/go-oidc/v3 v3.18.0
 	github.com/foxcpp/go-mockdns v1.2.0
 	github.com/kevinburke/ssh_config v1.6.0
 	github.com/stretchr/testify v1.11.1
 	go.uber.org/multierr v1.11.0
 	golang.org/x/crypto v0.50.0
+	golang.org/x/oauth2 v0.36.0
 	golang.org/x/sync v0.20.0
 	tailscale.com v1.98.0
 )
 
 require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
+	github.com/go-jose/go-jose/v4 v4.1.4 // indirect
 	github.com/go-json-experiment/json v0.0.0-20250813024750-ebf49471dced // indirect
 	github.com/kisielk/errcheck v1.10.0 // indirect
 	github.com/miekg/dns v1.1.58 // indirect

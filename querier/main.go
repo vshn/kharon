@@ -1,0 +1,202 @@
+package main
+
+import (
+	"context"
+	_ "embed"
+	"encoding/json"
+	"fmt"
+	"io"
+	"log"
+	"log/slog"
+	"net/http"
+	"net/url"
+	"os"
+	"os/exec"
+	"strings"
+	"text/tabwriter"
+
+	"github.com/coreos/go-oidc/v3/oidc"
+	"golang.org/x/oauth2"
+)
+
+type LieutenantConfigOIDC struct {
+	ClientID     string `json:"clientId"`
+	DiscoveryURL string `json:"discoveryUrl"`
+}
+
+type LieutenantConfig struct {
+	APIVersion string               `json:"apiVersion"`
+	OIDC       LieutenantConfigOIDC `json:"oidc"`
+}
+
+//go:embed success.html
+var successPage string
+
+func main() {
+	apiURL := os.Getenv("LIEUTENANT_URL")
+	if apiURL == "" {
+		apiURL = os.Getenv("COMMODORE_API_URL")
+	}
+	if apiURL == "" {
+		slog.Error("LIEUTENANT_URL or COMMODORE_API_URL environment variable must be set")
+		os.Exit(1)
+	}
+	slog.Info("Fetching OIDC config from the API", "api_url", apiURL)
+
+	r, err := http.Get(apiURL)
+	if err != nil {
+		slog.Error("Failed to fetch OIDC config from the API", "error", err)
+		os.Exit(1)
+	}
+	defer r.Body.Close()
+	defer io.Copy(io.Discard, r.Body)
+
+	if r.StatusCode != http.StatusOK {
+		slog.Error("API URL returned non-200 status code", "status_code", r.StatusCode)
+		os.Exit(1)
+	}
+
+	var cfg LieutenantConfig
+	if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
+		slog.Error("Failed to decode API response", "error", err)
+		os.Exit(1)
+	}
+
+	slog.Info("Successfully fetched OIDC config from the API", "client_id", cfg.OIDC.ClientID, "discovery_url", cfg.OIDC.DiscoveryURL)
+
+	provider, err := oidc.NewProvider(context.Background(), strings.TrimSuffix(cfg.OIDC.DiscoveryURL, "/.well-known/openid-configuration"))
+	if err != nil {
+		slog.Error("Failed to create OIDC provider", "error", err)
+		os.Exit(1)
+	}
+	conf := &oauth2.Config{
+		ClientID:    cfg.OIDC.ClientID,
+		Scopes:      []string{"openid", "email", "profile"},
+		Endpoint:    provider.Endpoint(),
+		RedirectURL: "http://localhost:18000",
+	}
+
+	code := make(chan string, 1)
+	serv := &http.Server{
+		Addr: "localhost:18000",
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			defer r.Body.Close()
+			io.Copy(io.Discard, r.Body)
+
+			c := r.URL.Query().Get("code")
+			if c == "" {
+				http.Error(w, "code query parameter is required", http.StatusBadRequest)
+				return
+			}
+
+			w.Header().Set("Content-Type", "text/html")
+			fmt.Fprint(w, successPage)
+			code <- c
+		}),
+	}
+	go serv.ListenAndServe()
+	defer serv.Close()
+
+	verifier := oauth2.GenerateVerifier()
+	authURL := conf.AuthCodeURL("",
+		oauth2.AccessTypeOffline,
+		oauth2.S256ChallengeOption(verifier),
+	)
+	fmt.Fprintln(os.Stderr, authURL)
+	_ = exec.Command("open", authURL).Run()
+
+	tok, err := conf.Exchange(context.Background(), <-code, oauth2.VerifierOption(verifier))
+	if err != nil {
+		log.Fatal(err)
+	}
+	_ = serv.Close()
+
+	hc := &http.Client{
+		Transport: &Transport{
+			Source: conf.TokenSource(context.Background(), tok),
+		},
+	}
+
+	res, err := hc.Get(apiURL + "/clusters")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer res.Body.Close()
+	defer io.Copy(io.Discard, res.Body)
+
+	slog.Info("API response status code", "status_code", res.StatusCode)
+	var clusters []Cluster
+	if err := json.NewDecoder(res.Body).Decode(&clusters); err != nil {
+		log.Fatal(err)
+	}
+
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
+	fmt.Fprintln(w, strings.Join([]string{"ID", "Display Name", "Jumphost", "Console URL"}, "\t"))
+	for _, c := range clusters {
+		console, _, _ := c.DynamicStringFact("openshiftConsoleURL")
+		jumphost, _, _ := c.StringFact("jumphost")
+		fmt.Fprintln(w, strings.Join([]string{c.ID, c.DisplayName, jumphost, console}, "\t"))
+	}
+	w.Flush()
+
+	mapping := make(map[string]string)
+	for _, c := range clusters {
+		jumphost, _, _ := c.StringFact("jumphost")
+		if jumphost == "" {
+			continue
+		}
+		baseDomain, _, _ := c.DynamicStringFact("openshiftBaseDomain")
+		if baseDomain == "" {
+			slog.Warn("Cluster has jumphost fact but no openshiftBaseDomain dynamic fact", "cluster_id", c.ID)
+		} else {
+			mapping[baseDomain] = jumphost
+		}
+		appsDomain, _, _ := c.DynamicStringFact("openshiftAppsDomain")
+		if appsDomain != "" && !hasBaseDomain(appsDomain, baseDomain) {
+			mapping[appsDomain] = jumphost
+		}
+		if apiUrl, _, _ := c.DynamicStringFact("openshiftApiURL"); apiUrl != "" {
+			u, err := url.Parse(apiUrl)
+			if err != nil {
+				slog.Warn("Failed to parse openshiftApiURL dynamic fact", "cluster_id", c.ID, "api_url", apiUrl, "error", err)
+			} else if domain := u.Hostname(); domain != "" && !hasBaseDomain(domain, baseDomain) {
+				mapping[domain] = jumphost
+			}
+		}
+		if consoleUrl, _, _ := c.DynamicStringFact("openshiftConsoleURL"); consoleUrl != "" {
+			u, err := url.Parse(consoleUrl)
+			if err != nil {
+				slog.Warn("Failed to parse openshiftConsoleURL dynamic fact", "cluster_id", c.ID, "console_url", consoleUrl, "error", err)
+			} else if domain := u.Hostname(); domain != "" && !hasBaseDomain(domain, baseDomain) {
+				mapping[domain] = jumphost
+			}
+		}
+		if additionalDomains, _, _ := c.StringFact("jumphostDomains"); additionalDomains != "" {
+			for _, domain := range strings.Split(additionalDomains, ",") {
+				domain = strings.TrimSpace(domain)
+				if domain != "" && !hasBaseDomain(domain, baseDomain) {
+					mapping[domain] = jumphost
+				}
+			}
+		}
+	}
+
+	f, err := os.OpenFile("domain_jumphost_mapping.json", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer f.Close()
+	enc := json.NewEncoder(f)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(mapping); err != nil {
+		log.Fatal(err)
+	}
+	slog.Info("Wrote domain to jumphost mapping to file", "file", "domain_jumphost_mapping.json")
+}
+
+func hasBaseDomain(domain, base string) bool {
+	if base == "" {
+		return false
+	}
+	return domain == base || strings.HasSuffix(domain, "."+base)
+}
