@@ -6,12 +6,17 @@
 	<string>io.vshn.Kharon</string>
 	<key>LimitLoadToSessionType</key>
 	<string>Aqua</string>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<!-- Required for the daemon to find its cache dir -->
+		<key>HOME</key>
+		<string>/Users/USER</string>
+	</dict>
 	<key>ProgramArguments</key>
 	<array>
 		<string>/Users/USER/workspace/kharon/kharon</string>
 		<string>-on-demand=launchd=Proxy</string>
 		<string>-v=-10</string>
-		<string>/Users/USER/workspace/kharon/domain_jumphost_mapping.json</string>
 	</array>
 	<key>StandardOutPath</key>
 	<string>/Users/USER/Library/Logs/io.vshn.Kharon.out.log</string>

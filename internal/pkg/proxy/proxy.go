@@ -151,6 +151,8 @@ func (p *Proxy) keepAliveInterval() time.Duration {
 }
 
 func loadHostnameMapping(mappingFile string) ([]hostSuffixJumphostMapping, error) {
+	l := slog.With(slog.String("mapping_file", mappingFile))
+	l.Info("Loading hostname mapping")
 	mf, err := os.Open(mappingFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read mapping file: %w", err)
@@ -171,7 +173,7 @@ func loadHostnameMapping(mappingFile string) ([]hostSuffixJumphostMapping, error
 	slices.SortFunc(hostnameMapping, func(a, b hostSuffixJumphostMapping) int {
 		return 10*(len(b.HostSuffix)-len(a.HostSuffix)) + strings.Compare(a.HostSuffix, b.HostSuffix)
 	})
-	slog.Info("Loaded hostname mappings", slog.Int("count", len(hostnameMapping)))
+	l.Info("Loaded hostname mappings", slog.Int("mappings", len(hostnameMapping)))
 	return hostnameMapping, nil
 }
 
