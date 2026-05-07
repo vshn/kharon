@@ -15,3 +15,11 @@ func CacheDir() (string, error) {
 	}
 	return filepath.Join(cp, label), nil
 }
+
+func InventoryFilePath() (string, error) {
+	cd, err := CacheDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(cd, "inventory.json"), nil
+}

@@ -24,5 +24,5 @@ func init() {
 }
 
 func Execute() {
-	RootCmd.ExecuteContext(context.Background())
+	_ = RootCmd.ExecuteContext(context.Background())
 }
