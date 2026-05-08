@@ -6,6 +6,7 @@ require (
 	github.com/bored-engineer/go-launchd v0.0.0-20241220214420-b514778f4f80
 	github.com/coreos/go-oidc/v3 v3.18.0
 	github.com/foxcpp/go-mockdns v1.2.0
+	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
 	github.com/kevinburke/ssh_config v1.6.0
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1

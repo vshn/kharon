@@ -9,11 +9,12 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"os/exec"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
+	"github.com/vshn/kharon/internal/pkg/browser"
 	"golang.org/x/oauth2"
 )
 
@@ -107,7 +108,10 @@ func (lts *LieutenantTokenSource) Token() (tok *oauth2.Token, err error) {
 		oauth2.S256ChallengeOption(verifier),
 	)
 	fmt.Fprintln(os.Stderr, authURL)
-	_ = exec.Command("open", authURL).Run()
+
+	if err := openBrowserWithTimeout(context.Background(), authURL, 20*time.Second); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to open browser automatically: %v\nPlease open the URL above manually.\n", err)
+	}
 
 	cr := <-code
 	if cr.err != nil {
@@ -148,4 +152,11 @@ func (lts *LieutenantTokenSource) config() (lieutenantConfig, error) {
 	slog.Debug("Successfully fetched OIDC config from the API", "client_id", cfg.OIDC.ClientID, "discovery_url", cfg.OIDC.DiscoveryURL)
 
 	return cfg, nil
+}
+
+func openBrowserWithTimeout(ctx context.Context, url string, timeout time.Duration) error {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	return browser.OpenURL(ctx, url)
 }
