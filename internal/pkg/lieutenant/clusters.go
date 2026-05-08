@@ -40,17 +40,31 @@ func stringFactFrom(m map[string]any, factName string) (string, bool, error) {
 	return "", false, nil
 }
 
-func GetClusters(ctx context.Context, apiURL string) ([]Cluster, error) {
-	tok := &login.LieutenantTokenSource{
-		APIURL: apiURL,
-	}
-	c := &http.Client{
-		Transport: &login.Transport{
-			Source: tok,
-		},
-	}
+type Client struct {
+	apiURL     string
+	httpClient *http.Client
+}
 
-	res, err := c.Get(apiURL + "/clusters")
+// NewClient creates a new Client for the Lieutenant API.
+// If httpClient is nil, a default client with OIDC authentication will be used.
+func NewClient(apiURL string, httpClient *http.Client) *Client {
+	if httpClient == nil {
+		httpClient = &http.Client{
+			Transport: &login.Transport{
+				Source: &login.LieutenantTokenSource{
+					APIURL: apiURL,
+				},
+			},
+		}
+	}
+	return &Client{
+		apiURL:     apiURL,
+		httpClient: httpClient,
+	}
+}
+
+func (c *Client) GetClusters(ctx context.Context) ([]Cluster, error) {
+	res, err := c.httpClient.Get(c.apiURL + "/clusters")
 	if err != nil {
 		return nil, err
 	}

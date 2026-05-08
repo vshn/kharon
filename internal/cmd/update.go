@@ -43,7 +43,7 @@ func runUpdate(cmd *cobra.Command, _ []string) {
 		os.Exit(1)
 	}
 
-	clusters, err := lieutenant.GetClusters(cmd.Context(), lieutenantAPIURL)
+	clusters, err := lieutenant.NewClient(lieutenantAPIURL, nil).GetClusters(cmd.Context())
 	if err != nil {
 		slog.Error("Failed to get clusters", "error", err)
 		os.Exit(1)
