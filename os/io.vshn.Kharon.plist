@@ -15,6 +15,7 @@
 	<key>ProgramArguments</key>
 	<array>
 		<string>/Users/USER/workspace/kharon/kharon</string>
+		<string>proxy</string>
 		<string>-on-demand=launchd=Proxy</string>
 		<string>-v=-10</string>
 	</array>
