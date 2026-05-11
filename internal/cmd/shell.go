@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -55,8 +56,7 @@ func runShell(cmd *cobra.Command, _ []string) {
 		clusterName := c.ID
 		contextName := c.ID
 		kc.Clusters[clusterName] = &kubeconfig.Cluster{
-			Server:   api,
-			ProxyURL: "socks5h://localhost:12000",
+			Server: api,
 		}
 		kc.Contexts[contextName] = &kubeconfig.Context{
 			Cluster: clusterName,
@@ -85,6 +85,9 @@ func runShell(cmd *cobra.Command, _ []string) {
 	}
 	ex := exec.Command(shell)
 	ex.Env = append(os.Environ(), "KUBECONFIG="+tmpFileName, "KHARON_SHELL=1")
+	for _, ev := range []string{"http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY"} {
+		ex.Env = append(ex.Env, fmt.Sprintf("%s=socks5h://localhost:12000", ev))
+	}
 	ex.Stdin = os.Stdin
 	ex.Stdout = os.Stdout
 	ex.Stderr = os.Stderr
