@@ -84,7 +84,7 @@ func runShell(cmd *cobra.Command, _ []string) {
 		os.Exit(1)
 	}
 	ex := exec.Command(shell)
-	ex.Env = append(os.Environ(), "KUBECONFIG="+tmpFileName)
+	ex.Env = append(os.Environ(), "KUBECONFIG="+tmpFileName, "KHARON_SHELL=1")
 	ex.Stdin = os.Stdin
 	ex.Stdout = os.Stdout
 	ex.Stderr = os.Stderr
