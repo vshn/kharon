@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
@@ -9,7 +8,8 @@ import (
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
-	"github.com/vshn/kharon/internal/pkg/lieutenant"
+
+	"github.com/vshn/kharon/internal/pkg/cache"
 )
 
 var clustersInventoryFile string
@@ -34,15 +34,9 @@ func runClusters(cmd *cobra.Command, _ []string) {
 		os.Exit(1)
 	}
 
-	var clusters []lieutenant.Cluster
-	f, err := os.Open(clustersInventoryFile)
+	clusters, err := cache.ReadInventoryFile(clustersInventoryFile)
 	if err != nil {
-		slog.Error("Failed to open inventory file", "file", clustersInventoryFile, "error", err)
-		os.Exit(1)
-	}
-	defer func() { _ = f.Close() }()
-	if err := json.NewDecoder(f).Decode(&clusters); err != nil {
-		slog.Error("Failed to decode inventory file", "file", clustersInventoryFile, "error", err)
+		slog.Error("Failed to read inventory file. You might need to run the `update` command first.", "error", err)
 		os.Exit(1)
 	}
 

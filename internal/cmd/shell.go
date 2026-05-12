@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -9,9 +8,11 @@ import (
 	"os/exec"
 
 	"github.com/spf13/cobra"
-	"github.com/vshn/kharon/internal/pkg/lieutenant"
 	"k8s.io/client-go/tools/clientcmd"
 	kubeconfig "k8s.io/client-go/tools/clientcmd/api"
+
+	"github.com/vshn/kharon/internal/pkg/cache"
+	"github.com/vshn/kharon/internal/pkg/lieutenant"
 )
 
 func init() {
@@ -29,23 +30,61 @@ var shellCmd = &cobra.Command{
 }
 
 func runShell(cmd *cobra.Command, _ []string) {
+	// Allows deferred functions to be run for cleanup.
+	exitCode := 0
+	defer func() { os.Exit(exitCode) }()
+
 	if clustersInventoryFile == "" {
 		slog.Error("Inventory file path is required", "error", "inventory-file flag is empty and failed to determine default path.")
-		os.Exit(1)
+		exitCode = 1
+		return
+	}
+	shell := os.Getenv("SHELL")
+	if shell == "" {
+		slog.Error("SHELL environment variable is not set")
+		exitCode = 1
+		return
 	}
 
-	var clusters []lieutenant.Cluster
-	f, err := os.Open(clustersInventoryFile)
+	clusters, err := cache.ReadInventoryFile(clustersInventoryFile)
 	if err != nil {
-		slog.Error("Failed to open inventory file", "file", clustersInventoryFile, "error", err)
-		os.Exit(1)
-	}
-	defer func() { _ = f.Close() }()
-	if err := json.NewDecoder(f).Decode(&clusters); err != nil {
-		slog.Error("Failed to decode inventory file", "file", clustersInventoryFile, "error", err)
-		os.Exit(1)
+		slog.Error("Failed to read inventory file. You might need to run the `update` command first.", "error", err)
+		exitCode = 1
+		return
 	}
 
+	tmpKubeconfig, err := writeKubeconfigToTempFile(kubeconfigFromClusters(clusters))
+	if err != nil {
+		slog.Error("Failed to write kubeconfig to temporary file", "error", err)
+		exitCode = 1
+		return
+	}
+	defer func() {
+		if err := os.Remove(tmpKubeconfig); err != nil {
+			slog.Warn("Failed to remove temporary kubeconfig file", "file", tmpKubeconfig, "error", err)
+		}
+	}()
+
+	ex := exec.Command(shell)
+	ex.Env = append(os.Environ(), "KHARON_SHELL=1", fmt.Sprintf("KUBECONFIG=%s", tmpKubeconfig))
+	for _, ev := range []string{"http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY"} {
+		ex.Env = append(ex.Env, fmt.Sprintf("%s=socks5h://localhost:12000", ev))
+	}
+	ex.Stdin = os.Stdin
+	ex.Stdout = os.Stdout
+	ex.Stderr = os.Stderr
+	if err := ex.Run(); err != nil {
+		if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
+			exitCode = exitErr.ExitCode()
+			return
+		}
+		slog.Error("Failed to run shell", "error", err)
+		exitCode = 1
+		return
+	}
+}
+
+func kubeconfigFromClusters(clusters []lieutenant.Cluster) *kubeconfig.Config {
 	kc := kubeconfig.NewConfig()
 	currentContextSet := false
 	for _, c := range clusters {
@@ -66,36 +105,21 @@ func runShell(cmd *cobra.Command, _ []string) {
 			currentContextSet = true
 		}
 	}
+	return kc
+}
+
+func writeKubeconfigToTempFile(kc *kubeconfig.Config) (string, error) {
 	tmpFile, err := os.CreateTemp("", "kharon-shell-*.kubeconfig")
 	if err != nil {
-		slog.Error("Failed to create temporary kubeconfig file", "error", err)
-		os.Exit(1)
+		return "", fmt.Errorf("failed to create temporary kubeconfig file: %w", err)
 	}
-	_ = f.Close() // We only need the name, so we can close it immediately.
+	// We only need the name, so we can close it immediately.
+	if err := tmpFile.Close(); err != nil {
+		return "", fmt.Errorf("failed to close temporary kubeconfig file: %w", err)
+	}
 	tmpFileName := tmpFile.Name()
-	defer func() { _ = os.Remove(tmpFileName) }()
 	if err := clientcmd.WriteToFile(*kc, tmpFileName); err != nil {
-		slog.Error("Failed to write kubeconfig", "error", err)
-		os.Exit(1)
+		return "", fmt.Errorf("failed to write kubeconfig to temporary file: %w", err)
 	}
-	shell := os.Getenv("SHELL")
-	if shell == "" {
-		slog.Error("SHELL environment variable is not set")
-		os.Exit(1)
-	}
-	ex := exec.Command(shell)
-	ex.Env = append(os.Environ(), "KUBECONFIG="+tmpFileName, "KHARON_SHELL=1")
-	for _, ev := range []string{"http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY"} {
-		ex.Env = append(ex.Env, fmt.Sprintf("%s=socks5h://localhost:12000", ev))
-	}
-	ex.Stdin = os.Stdin
-	ex.Stdout = os.Stdout
-	ex.Stderr = os.Stderr
-	if err := ex.Run(); err != nil {
-		if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
-			os.Exit(exitErr.ExitCode())
-		}
-		slog.Error("Failed to run shell", "error", err)
-		os.Exit(1)
-	}
+	return tmpFileName, nil
 }

@@ -1,14 +1,11 @@
 package cmd
 
 import (
-	"encoding/json"
-	"fmt"
-	"log"
 	"log/slog"
 	"os"
-	"path/filepath"
 
 	"github.com/spf13/cobra"
+
 	"github.com/vshn/kharon/internal/pkg/cache"
 	"github.com/vshn/kharon/internal/pkg/lieutenant"
 )
@@ -49,36 +46,20 @@ func runUpdate(cmd *cobra.Command, _ []string) {
 		os.Exit(1)
 	}
 
-	if err := writeJSONToFile(clusters, updateInventoryFile); err != nil {
-		log.Fatal(err)
+	if err := cache.WriteInventoryFile(updateInventoryFile, clusters); err != nil {
+		slog.Error("Failed to write inventory file", "error", err)
+		os.Exit(1)
 	}
 	slog.Info("Wrote cluster inventory to file.", "file", updateInventoryFile)
 	mapping, err := lieutenant.JumphostMappingFromClusters(clusters)
 	if err != nil {
 		slog.Warn("Jumphost mapping may be incomplete", "error", err)
 	}
-	if err := writeJSONToFile(mapping, updateMappingFile); err != nil {
-		log.Fatal(err)
+	if err := cache.WriteProxyMappingFile(updateMappingFile, mapping); err != nil {
+		slog.Error("Failed to write proxy mapping file", "error", err)
+		os.Exit(1)
 	}
 	slog.Info("Wrote domain to jumphost mapping to file.", "file", updateMappingFile)
-}
-
-func writeJSONToFile(data any, filePath string) error {
-	dir := filepath.Dir(filePath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf("failed to create directory path %q: %w", dir, err)
-	}
-	f, err := os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
-	if err != nil {
-		return fmt.Errorf("failed to open file %q for writing: %w", filePath, err)
-	}
-	defer func() { _ = f.Close() }()
-	enc := json.NewEncoder(f)
-	enc.SetIndent("", "  ")
-	if err := enc.Encode(data); err != nil {
-		return fmt.Errorf("failed to encode data to JSON and write to file %q: %w", filePath, err)
-	}
-	return nil
 }
 
 func lieutenantURLFromEnv() string {

@@ -32,6 +32,8 @@ import (
 	"golang.org/x/crypto/ssh/agent"
 	"golang.org/x/crypto/ssh/knownhosts"
 	"golang.org/x/sync/errgroup"
+
+	"github.com/vshn/kharon/internal/pkg/cache"
 )
 
 func Test_jumphostChainForTarget(t *testing.T) {
@@ -96,7 +98,17 @@ func Test_jumphostChainForTarget(t *testing.T) {
 }
 
 func Test_loadHostnameMapping(t *testing.T) {
-	loaded, err := loadHostnameMapping(filepath.Join("testdata", "mapping.json"))
+	path := filepath.Join(t.TempDir(), "mapping.json")
+	require.NoError(t, cache.WriteProxyMappingFile(path, map[string]string{
+		"c-bettersmarter-prod01.vshnmanaged.net":     "jumphost1",
+		"a.storage.bettersmarter.ch":                 "jumphost4",
+		"api.c-bettersmarter-prod01.vshnmanaged.net": "jumphost2",
+		"vcenter.bettersmarter.ch":                   "jumphost3",
+		"b.storage.bettersmarter.ch":                 "jumphost5",
+		"c.storage.bettersmarter.ch":                 "jumphost6",
+	}))
+
+	loaded, err := loadHostnameMapping(path)
 	require.NoError(t, err)
 	assert.Equal(t, []hostSuffixJumphostMapping{
 		{HostSuffix: "api.c-bettersmarter-prod01.vshnmanaged.net", Jumphost: "jumphost2"},
@@ -144,12 +156,12 @@ func Test_Start(t *testing.T) {
 	})
 
 	mappingPath := filepath.Join(t.TempDir(), "mapping.json")
-	require.NoError(t, os.WriteFile(mappingPath, requireJSONMarshal(t, map[string]string{
+	require.NoError(t, cache.WriteProxyMappingFile(mappingPath, map[string]string{
 		"one.hop":    "jumphost1",
 		"two.hops":   "jumphost2",
 		"three.hops": "jumphost3",
 		"error.hop":  "nonexistent.jumphost",
-	}), 0o600))
+	}), "failed to update hostname mapping")
 
 	sshConfigPath := filepath.Join(t.TempDir(), "ssh_config")
 	b := sshConfigBuilder{
@@ -268,12 +280,12 @@ func Test_Start(t *testing.T) {
 	}
 	require.NoError(t, os.WriteFile(sshConfigPath, []byte(b.String()), 0o600))
 
-	require.NoError(t, os.WriteFile(mappingPath, requireJSONMarshal(t, map[string]string{
+	require.NoError(t, cache.WriteProxyMappingFile(mappingPath, map[string]string{
 		"one.hop":      "jumphost1",
 		"two.hops":     "jumphost2",
 		"three.hops":   "jumphost3",
 		"after.reload": "jumphost4",
-	}), 0o600), "failed to update hostname mapping")
+	}), "failed to update hostname mapping")
 
 	require.NoError(t, p.Reload(mappingPath), "failed to reload proxy with updated SSH config and hostname mapping")
 
@@ -296,7 +308,7 @@ func Test_Start_AutomaticShutdown(t *testing.T) {
 	localDNSResolver := localhostResolverFor(t, "no.hop")
 
 	mappingPath := filepath.Join(t.TempDir(), "mapping.json")
-	require.NoError(t, os.WriteFile(mappingPath, []byte("{}"), 0o600))
+	require.NoError(t, cache.WriteProxyMappingFile(mappingPath, map[string]string{}), "failed to write initial empty mapping file")
 
 	sshConfigPath := filepath.Join(t.TempDir(), "ssh_config")
 	b := sshConfigBuilder{

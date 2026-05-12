@@ -13,8 +13,9 @@ import (
 	"sync"
 
 	"github.com/coreos/go-oidc/v3/oidc"
-	"github.com/vshn/kharon/internal/pkg/browser"
 	"golang.org/x/oauth2"
+
+	"github.com/vshn/kharon/internal/pkg/browser"
 )
 
 //go:embed success.html

@@ -10,8 +10,9 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/vshn/kharon/internal/pkg/lieutenant/login"
 	"go.uber.org/multierr"
+
+	"github.com/vshn/kharon/internal/pkg/lieutenant/login"
 )
 
 type Cluster struct {
