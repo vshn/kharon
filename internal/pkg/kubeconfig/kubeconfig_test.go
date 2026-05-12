@@ -5,9 +5,10 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"sigs.k8s.io/yaml"
+
 	"github.com/vshn/kharon/internal/pkg/kubeconfig"
 	"github.com/vshn/kharon/internal/pkg/lieutenant"
-	"sigs.k8s.io/yaml"
 )
 
 func Test_FromClusters_Encode(t *testing.T) {
