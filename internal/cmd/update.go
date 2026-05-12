@@ -10,6 +10,8 @@ import (
 	"github.com/vshn/kharon/internal/pkg/lieutenant"
 )
 
+const defaultLieutenantURL = "https://api.syn.vshn.net"
+
 var updateMappingFile, updateInventoryFile string
 var lieutenantAPIURL string
 
@@ -19,7 +21,7 @@ func init() {
 	flag := updateCmd.Flags()
 	flag.StringVar(&updateMappingFile, "mapping-file", proxyMappingFilePath(), "Path to the domain to jumphost mapping file that should be written by this command.")
 	flag.StringVar(&updateInventoryFile, "inventory-file", inventoryFilePath(), "Path to the inventory file that should be written by this command.")
-	flag.StringVar(&lieutenantAPIURL, "lieutenant-url", lieutenantURLFromEnv(), "URL of the Lieutenant API.")
+	flag.StringVar(&lieutenantAPIURL, "lieutenant-url", lieutenantURLFromEnvOrDefault(), "URL of the Lieutenant API.")
 }
 
 var updateCmd = &cobra.Command{
@@ -62,10 +64,16 @@ func runUpdate(cmd *cobra.Command, _ []string) {
 	slog.Info("Wrote domain to jumphost mapping to file.", "file", updateMappingFile)
 }
 
-func lieutenantURLFromEnv() string {
+// lieutenantURLFromEnvOrDefault returns the Lieutenant API URL from the LIEUTENANT_URL environment variable if set,
+// otherwise from the COMMODORE_API_URL environment variable if set,
+// and if neither is set, it returns the defaultLieutenantURL.
+func lieutenantURLFromEnvOrDefault() string {
 	apiURL := os.Getenv("LIEUTENANT_URL")
 	if apiURL == "" {
 		apiURL = os.Getenv("COMMODORE_API_URL")
+	}
+	if apiURL == "" {
+		apiURL = defaultLieutenantURL
 	}
 	return apiURL
 }
