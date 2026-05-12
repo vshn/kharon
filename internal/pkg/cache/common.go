@@ -9,9 +9,11 @@ import (
 
 const label = "io.vshn.kharon"
 
+var userCacheDirFunc = os.UserCacheDir
+
 // CacheDir returns the directory path where kharon stores its various cache files.
 func CacheDir() (string, error) {
-	cp, err := os.UserCacheDir()
+	cp, err := userCacheDirFunc()
 	if err != nil {
 		return "", err
 	}
