@@ -8,11 +8,9 @@ import (
 	"os/exec"
 
 	"github.com/spf13/cobra"
-	"k8s.io/client-go/tools/clientcmd"
-	kubeconfig "k8s.io/client-go/tools/clientcmd/api"
 
 	"github.com/vshn/kharon/internal/pkg/cache"
-	"github.com/vshn/kharon/internal/pkg/lieutenant"
+	"github.com/vshn/kharon/internal/pkg/kubeconfig"
 )
 
 func init() {
@@ -53,7 +51,7 @@ func runShell(cmd *cobra.Command, _ []string) {
 		return
 	}
 
-	tmpKubeconfig, err := writeKubeconfigToTempFile(kubeconfigFromClusters(clusters))
+	tmpKubeconfig, err := writeKubeconfigToTempFile(kubeconfig.FromClusters(clusters))
 	if err != nil {
 		slog.Error("Failed to write kubeconfig to temporary file", "error", err)
 		exitCode = 1
@@ -84,42 +82,14 @@ func runShell(cmd *cobra.Command, _ []string) {
 	}
 }
 
-func kubeconfigFromClusters(clusters []lieutenant.Cluster) *kubeconfig.Config {
-	kc := kubeconfig.NewConfig()
-	currentContextSet := false
-	for _, c := range clusters {
-		api, _, _ := c.DynamicStringFact("openshiftApiURL")
-		if api == "" {
-			continue
-		}
-		clusterName := c.ID
-		contextName := c.ID
-		kc.Clusters[clusterName] = &kubeconfig.Cluster{
-			Server: api,
-		}
-		kc.Contexts[contextName] = &kubeconfig.Context{
-			Cluster: clusterName,
-		}
-		if !currentContextSet {
-			kc.CurrentContext = contextName
-			currentContextSet = true
-		}
-	}
-	return kc
-}
-
 func writeKubeconfigToTempFile(kc *kubeconfig.Config) (string, error) {
 	tmpFile, err := os.CreateTemp("", "kharon-shell-*.kubeconfig")
 	if err != nil {
 		return "", fmt.Errorf("failed to create temporary kubeconfig file: %w", err)
 	}
-	// We only need the name, so we can close it immediately.
-	if err := tmpFile.Close(); err != nil {
-		return "", fmt.Errorf("failed to close temporary kubeconfig file: %w", err)
-	}
-	tmpFileName := tmpFile.Name()
-	if err := clientcmd.WriteToFile(*kc, tmpFileName); err != nil {
+	defer func() { _ = tmpFile.Close() }()
+	if err := kubeconfig.Encode(kc, tmpFile); err != nil {
 		return "", fmt.Errorf("failed to write kubeconfig to temporary file: %w", err)
 	}
-	return tmpFileName, nil
+	return tmpFile.Name(), nil
 }
