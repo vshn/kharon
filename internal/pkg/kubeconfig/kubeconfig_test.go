@@ -29,7 +29,7 @@ func Test_FromClusters_Encode(t *testing.T) {
 				"openshiftApiURL": "https://api.c-example-2.vshnmanaged.net:6443",
 			},
 		},
-	}), &res))
+	}, ""), &res))
 	resultJSON, err := yaml.YAMLToJSONStrict(res.Bytes())
 	require.NoError(t, err)
 
@@ -71,4 +71,26 @@ func Test_FromClusters_Encode(t *testing.T) {
 }`
 
 	require.JSONEq(t, expected, string(resultJSON))
+}
+
+func Test_FromClusters_CurrentContext(t *testing.T) {
+	t.Run("context provided", func(t *testing.T) {
+		kc := kubeconfig.FromClusters([]lieutenant.Cluster{}, "wanted-context")
+		require.Equal(t, "wanted-context", kc.CurrentContext)
+	})
+
+	t.Run("context not provided", func(t *testing.T) {
+		kc := kubeconfig.FromClusters([]lieutenant.Cluster{
+			{
+				ID: "c-test-1",
+			},
+			{
+				ID: "c-example-2",
+				DynamicFacts: map[string]any{
+					"openshiftApiURL": "https://api.c-example-2.vshnmanaged.net:6443",
+				},
+			},
+		}, "")
+		require.Equal(t, "c-example-2", kc.CurrentContext)
+	})
 }
