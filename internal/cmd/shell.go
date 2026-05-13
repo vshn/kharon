@@ -15,6 +15,19 @@ import (
 	"github.com/vshn/kharon/internal/pkg/lieutenant"
 )
 
+const shellCmdLongDesc = `Run a shell with a kubeconfig generated from the inventory, set up to use the proxy.
+The generated kubeconfig contains all clusters from the inventory with an OpenShift API URL.
+The kubeconfig context can be set to a specific cluster by providing the cluster ID as the first argument.
+If no argument is provided, the context is set to the first found cluster with a valid OpenShift API URL.
+
+Works on the inventory downloaded by the 'update' command, so it does not require access to the Lieutenant API.`
+
+const shellCmdExample = `# Get a shell
+kharon shell
+
+# Get a shell for a specific cluster
+kharon shell c-12345`
+
 func init() {
 	RootCmd.AddCommand(shellCmd)
 
@@ -23,10 +36,12 @@ func init() {
 }
 
 var shellCmd = &cobra.Command{
-	Use:   "shell",
-	Short: "Run a shell with kubeconfig set up to use the proxy.",
-	Long:  "Run a shell with kubeconfig set up to use the proxy. Works on the inventory downloaded by the `update` command, so it does not require access to the Lieutenant API.",
-	Run:   runShell,
+	Use:     "shell [c-cluster-id]",
+	Short:   "Run a shell with a kubeconfig generated from the inventory, set up to use the proxy.",
+	Long:    shellCmdLongDesc,
+	Example: shellCmdExample,
+	Run:     runShell,
+	Args:    cobra.MaximumNArgs(1),
 	ValidArgsFunction: completion.ClusterID(clustersInventoryFile, func(cluster lieutenant.Cluster) bool {
 		api, _, _ := cluster.DynamicStringFact(lieutenant.KnownDynamicFactOpenshiftApiURL)
 		return api != ""
