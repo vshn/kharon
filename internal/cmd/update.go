@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 
 	"github.com/spf13/cobra"
 
@@ -78,13 +79,13 @@ func sendSIGHUP() error {
 	if err != nil {
 		return fmt.Errorf("failed to get executable path: %w", err)
 	}
-	cmd := exec.Command("pkill", "-SIGHUP", filepath.Base(self))
+	cmd := exec.Command("pkill", "-SIGHUP", "-f", fmt.Sprintf("%s%s", regexp.QuoteMeta(filepath.Base(self)), ".+proxy"))
 	if err := cmd.Run(); err != nil {
 		if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
 			// pkill returns exit code 1 if no process was matched, which is not an error in this case.
 			// Command errors are from exit code 2 and above.
 			if exitErr.ExitCode() == 1 {
-				slog.Info("No kharon processes found to send SIGHUP signal to.")
+				slog.Info("No kharon processes found to send SIGHUP signal to or no signal could be sent.")
 				return nil
 			}
 		}
