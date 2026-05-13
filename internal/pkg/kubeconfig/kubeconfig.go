@@ -23,7 +23,7 @@ func FromClusters(clusters []lieutenant.Cluster, currentContext string) *Config 
 		currentContextSet = true
 	}
 	for _, c := range clusters {
-		api, _, _ := c.DynamicStringFact("openshiftApiURL")
+		api, _, _ := c.DynamicStringFact(lieutenant.KnownDynamicFactOpenshiftApiURL)
 		if api == "" {
 			continue
 		}

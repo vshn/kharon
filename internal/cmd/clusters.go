@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/vshn/kharon/internal/pkg/cache"
+	"github.com/vshn/kharon/internal/pkg/lieutenant"
 )
 
 var clustersInventoryFile string
@@ -43,8 +44,8 @@ func runClusters(cmd *cobra.Command, _ []string) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 	_, _ = fmt.Fprintln(w, strings.Join([]string{"ID", "Display Name", "Jumphost", "Console URL"}, "\t"))
 	for _, c := range clusters {
-		console, _, _ := c.DynamicStringFact("openshiftConsoleURL")
-		jumphost, _, _ := c.StringFact("jumphost")
+		console, _, _ := c.DynamicStringFact(lieutenant.KnownDynamicFactOpenshiftConsoleURL)
+		jumphost, _, _ := c.StringFact(lieutenant.KnownFactJumphost)
 		_, _ = fmt.Fprintln(w, strings.Join([]string{c.ID, c.DisplayName, jumphost, console}, "\t"))
 	}
 	_ = w.Flush()

@@ -20,13 +20,13 @@ func Test_FromClusters_Encode(t *testing.T) {
 		{
 			ID: "c-test-1",
 			DynamicFacts: map[string]any{
-				"openshiftApiURL": "https://api.c-test-1.vshnmanaged.net:6443",
+				lieutenant.KnownDynamicFactOpenshiftApiURL: "https://api.c-test-1.vshnmanaged.net:6443",
 			},
 		},
 		{
 			ID: "c-example-2",
 			DynamicFacts: map[string]any{
-				"openshiftApiURL": "https://api.c-example-2.vshnmanaged.net:6443",
+				lieutenant.KnownDynamicFactOpenshiftApiURL: "https://api.c-example-2.vshnmanaged.net:6443",
 			},
 		},
 	}, ""), &res))
@@ -87,7 +87,7 @@ func Test_FromClusters_CurrentContext(t *testing.T) {
 			{
 				ID: "c-example-2",
 				DynamicFacts: map[string]any{
-					"openshiftApiURL": "https://api.c-example-2.vshnmanaged.net:6443",
+					lieutenant.KnownDynamicFactOpenshiftApiURL: "https://api.c-example-2.vshnmanaged.net:6443",
 				},
 			},
 		}, "")

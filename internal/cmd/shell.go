@@ -28,7 +28,7 @@ var shellCmd = &cobra.Command{
 	Long:  "Run a shell with kubeconfig set up to use the proxy. Works on the inventory downloaded by the `update` command, so it does not require access to the Lieutenant API.",
 	Run:   runShell,
 	ValidArgsFunction: completion.ClusterID(clustersInventoryFile, func(cluster lieutenant.Cluster) bool {
-		api, _, _ := cluster.DynamicStringFact("openshiftApiURL")
+		api, _, _ := cluster.DynamicStringFact(lieutenant.KnownDynamicFactOpenshiftApiURL)
 		return api != ""
 	}),
 }
