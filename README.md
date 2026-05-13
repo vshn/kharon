@@ -21,12 +21,22 @@ Currently the tool relies on a SSH agent running. Either the `SSH_AUTH_SOCK` env
 
 Setup [SSH Jumphost (sshop)](https://vshnwiki.atlassian.net/wiki/spaces/VT/pages/8291275/SSH+Jumphost+sshop).
 
-Download a copy of https://git.vshn.net/vshn/openshift4-clusters/-/raw/main/domain_jumphost_mapping.json?ref_type=heads.
+Pull jumphost configuration and cluster inventory from Lieutenant:
 
 ```sh
-go run . domain_jumphost_mapping.json
+go run . update
 ```
 
-Point your browser or `kubectl`/`oc` to `socks5h://localhost:12000`.
+Start the proxy:
+
+```sh
+go run . proxy
+```
+
+Point your browser to `socks5h://localhost:12000` or get a shell with environment and kube configs set up:
+
+```sh
+go run . shell
+```
 
 There are sample `systemd`/`launchd` unit files in the `os/` directory.
