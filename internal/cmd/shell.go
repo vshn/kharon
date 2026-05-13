@@ -17,13 +17,13 @@ func init() {
 	RootCmd.AddCommand(shellCmd)
 
 	flag := shellCmd.Flags()
-	flag.StringVar(&clustersInventoryFile, "inventory-file", inventoryFilePath(), "Path to the inventory file that should be written by this command.")
+	flag.StringVar(&clustersInventoryFile, "inventory-file", inventoryFilePath(), "Path to the inventory file that should be used by this command.")
 }
 
 var shellCmd = &cobra.Command{
 	Use:   "shell",
-	Short: "Run a shell with kubeconfig setup to use the proxy.",
-	Long:  "Run a shell with kubeconfig setup to use the proxy. Works on the inventory downloaded by the `update` command, so it does not require access to the Lieutenant API.",
+	Short: "Run a shell with kubeconfig set up to use the proxy.",
+	Long:  "Run a shell with kubeconfig set up to use the proxy. Works on the inventory downloaded by the `update` command, so it does not require access to the Lieutenant API.",
 	Run:   runShell,
 }
 

@@ -18,7 +18,7 @@ func init() {
 	RootCmd.AddCommand(clustersCmd)
 
 	flag := clustersCmd.Flags()
-	flag.StringVar(&clustersInventoryFile, "inventory-file", inventoryFilePath(), "Path to the inventory file that should be written by this command.")
+	flag.StringVar(&clustersInventoryFile, "inventory-file", inventoryFilePath(), "Path to the inventory file that should be used by this command.")
 }
 
 var clustersCmd = &cobra.Command{
