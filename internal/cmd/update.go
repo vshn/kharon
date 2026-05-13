@@ -1,8 +1,12 @@
 package cmd
 
 import (
+	"errors"
+	"fmt"
 	"log/slog"
 	"os"
+	"os/exec"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 
@@ -31,7 +35,7 @@ var updateCmd = &cobra.Command{
 	Run:   runUpdate,
 }
 
-func runUpdate(cmd *cobra.Command, _ []string) {
+func runUpdate(cmd *cobra.Command, args []string) {
 	if updateMappingFile == "" {
 		slog.Error("Mapping file path is required", "error", "mapping-file flag is empty and failed to determine default path.")
 		os.Exit(1)
@@ -62,6 +66,31 @@ func runUpdate(cmd *cobra.Command, _ []string) {
 		os.Exit(1)
 	}
 	slog.Info("Wrote domain to jumphost mapping to file.", "file", updateMappingFile)
+
+	if err := sendSIGHUP(); err != nil {
+		slog.Warn("Failed to send SIGHUP signal to kharon processes", "error", err)
+	}
+}
+
+// sendSIGHUP sends a SIGHUP signal to all running kharon processes to trigger a reload of the configuration.
+func sendSIGHUP() error {
+	self, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("failed to get executable path: %w", err)
+	}
+	cmd := exec.Command("pkill", "-SIGHUP", filepath.Base(self))
+	if err := cmd.Run(); err != nil {
+		if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
+			// pkill returns exit code 1 if no process was matched, which is not an error in this case.
+			// Command errors are from exit code 2 and above.
+			if exitErr.ExitCode() == 1 {
+				slog.Info("No kharon processes found to send SIGHUP signal to.")
+				return nil
+			}
+		}
+		return fmt.Errorf("failed to send SIGHUP signal: %w", err)
+	}
+	return nil
 }
 
 // lieutenantURLFromEnvOrDefault returns the Lieutenant API URL from the LIEUTENANT_URL environment variable if set,
