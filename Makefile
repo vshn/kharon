@@ -40,6 +40,6 @@ lint: fmt vet generate ## All-in-one linting
 clean: ## Cleans up the generated resources
 	rm -rf cover.out $(BIN_FILENAME) ||:
 
-.PHONY: run
-run: build ## Starts the proxy server on a random port with the provided mapping file
-	./$(BIN_FILENAME) -addr 127.0.0.1:0 domain_jumphost_mapping.json
+.PHONY: proxy
+proxy: build ## Starts the proxy server on a random port
+	./$(BIN_FILENAME) proxy -v=-100 --addr 127.0.0.1:0

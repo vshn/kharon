@@ -2,7 +2,6 @@ package proxy
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -22,6 +21,8 @@ import (
 	"golang.org/x/crypto/ssh/knownhosts"
 	"golang.org/x/sync/errgroup"
 	"tailscale.com/net/socks5"
+
+	"github.com/vshn/kharon/internal/pkg/cache"
 )
 
 const keepAliveRequestType = "keepalive@kharon"
@@ -151,14 +152,11 @@ func (p *Proxy) keepAliveInterval() time.Duration {
 }
 
 func loadHostnameMapping(mappingFile string) ([]hostSuffixJumphostMapping, error) {
-	mf, err := os.Open(mappingFile)
+	l := slog.With(slog.String("mapping_file", mappingFile))
+	l.Info("Loading hostname mapping")
+	hmp, err := cache.ReadProxyMappingFile(mappingFile)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read mapping file: %w", err)
-	}
-	defer func() { _ = mf.Close() }()
-	var hmp map[string]string
-	if err := json.NewDecoder(mf).Decode(&hmp); err != nil {
-		return nil, fmt.Errorf("failed to parse mapping file: %w", err)
+		return nil, fmt.Errorf("failed to read proxy mapping file. You might need to run the `update` command first.: %w", err)
 	}
 	hostnameMapping := make([]hostSuffixJumphostMapping, 0, len(hmp))
 	for h, jh := range hmp {
@@ -171,7 +169,7 @@ func loadHostnameMapping(mappingFile string) ([]hostSuffixJumphostMapping, error
 	slices.SortFunc(hostnameMapping, func(a, b hostSuffixJumphostMapping) int {
 		return 10*(len(b.HostSuffix)-len(a.HostSuffix)) + strings.Compare(a.HostSuffix, b.HostSuffix)
 	})
-	slog.Info("Loaded hostname mappings", slog.Int("count", len(hostnameMapping)))
+	l.Info("Loaded hostname mappings", slog.Int("mappings", len(hostnameMapping)))
 	return hostnameMapping, nil
 }
 
