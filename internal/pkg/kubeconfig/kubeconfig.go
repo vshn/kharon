@@ -1,8 +1,12 @@
 package kubeconfig
 
 import (
+	"fmt"
 	"io"
+	"regexp"
+	"strings"
 
+	"k8s.io/client-go/tools/clientcmd"
 	model "k8s.io/client-go/tools/clientcmd/api"
 	clientcmdlatest "k8s.io/client-go/tools/clientcmd/api/latest"
 
@@ -46,4 +50,77 @@ func FromClusters(clusters []lieutenant.Cluster, currentContext string) *Config 
 // Encode encodes the given kubeconfig Config object to the provided writer in YAML format.
 func Encode(kc *Config, w io.Writer) error {
 	return clientcmdlatest.Codec.Encode(kc, w)
+}
+
+func InsertTokenIntoCurrentContext(token string) error {
+	return updateKubeconfig(func(config *model.Config) error {
+		if config.CurrentContext == "" || config.Contexts[config.CurrentContext] == nil {
+			return fmt.Errorf("no current context set in kubeconfig or current context is invalid")
+		}
+
+		kubectx := config.Contexts[config.CurrentContext]
+		if kubectx.AuthInfo == "" {
+			config.Contexts[config.CurrentContext].AuthInfo = authInfoName(config.CurrentContext)
+		}
+		if authInfo, ok := config.AuthInfos[kubectx.AuthInfo]; ok {
+			config.AuthInfos[kubectx.AuthInfo] = &model.AuthInfo{
+				Token:                token,
+				Impersonate:          authInfo.Impersonate,
+				ImpersonateGroups:    authInfo.ImpersonateGroups,
+				ImpersonateUserExtra: authInfo.ImpersonateUserExtra,
+			}
+		} else {
+			config.AuthInfos[kubectx.AuthInfo] = &model.AuthInfo{
+				Token: token,
+			}
+		}
+		return nil
+	})
+}
+
+var urlToContextReplacementRegex = regexp.MustCompile(`[^a-zA-Z0-9:]`)
+
+// InsertConnectionInfoIntoKubeconfig inserts a new cluster, context, and auth info into the kubeconfig for the given context name, API URL, and token.
+// If contextName is empty, a context name will be generated from the API URL by removing the protocol and replacing non-alphanumeric characters with dashes.
+func InsertConnectionInfoIntoKubeconfig(contextName, apiURL, token string) error {
+	if contextName == "" {
+		contextName = urlToContextReplacementRegex.ReplaceAllString(strings.TrimPrefix(strings.TrimPrefix(apiURL, "http://"), "https://"), "-")
+	}
+
+	return updateKubeconfig(func(config *model.Config) error {
+		authInfoName := authInfoName(contextName)
+		config.Clusters[contextName] = &model.Cluster{
+			Server: apiURL,
+		}
+		config.Contexts[contextName] = &model.Context{
+			Cluster:  contextName,
+			AuthInfo: authInfoName,
+		}
+		config.AuthInfos[authInfoName] = &model.AuthInfo{
+			Token: token,
+		}
+		config.CurrentContext = contextName
+		return nil
+	})
+}
+
+func updateKubeconfig(updateFunc func(*model.Config) error) error {
+	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
+
+	configOverrides := &clientcmd.ConfigOverrides{}
+
+	config, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, configOverrides).RawConfig()
+	if err != nil {
+		return fmt.Errorf("failed to load kubeconfig for editing: %w", err)
+	}
+
+	if err := updateFunc(&config); err != nil {
+		return fmt.Errorf("update callback failed: %w", err)
+	}
+
+	return clientcmd.ModifyConfig(loadingRules, config, true)
+}
+
+func authInfoName(contextName string) string {
+	return fmt.Sprintf("%s/kharon-login", contextName)
 }
