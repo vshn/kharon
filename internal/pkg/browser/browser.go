@@ -18,10 +18,16 @@ var Stderr io.Writer = os.Stderr
 
 // OpenURL opens the specified URL in the default web browser of the user.
 // The provided context is used to interrupt the process (by calling cmd.Cancel or os.Process.Kill) if the context becomes done before the command completes on its own.
+// The function first checks the KHARON_BROWSER environment variable, then BROWSER, and if neither is set, it looks for the default browser executable in the system's PATH.
 func OpenURL(ctx context.Context, url string) error {
-	if e := os.Getenv("BROWSER"); e != "" {
+	e := os.Getenv("KHARON_BROWSER")
+	if e == "" {
+		e = os.Getenv("BROWSER")
+	}
+	if e != "" {
 		return parseAndRunCmd(ctx, e, url)
 	}
+
 	exec, err := executable()
 	if err != nil {
 		return err
