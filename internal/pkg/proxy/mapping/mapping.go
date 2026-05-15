@@ -37,7 +37,7 @@ func JumphostMappingFromClusters(clusters []lieutenant.Cluster) (JumphostMapping
 		if err != nil {
 			errs = append(errs, fmt.Errorf("failed to get jumphostSkipDomains fact for cluster %s: %w", c.ID, err))
 		} else if direct != "" {
-			for _, domain := range strings.Split(direct, ",") {
+			for domain := range strings.SplitSeq(direct, ",") {
 				domain = strings.TrimSpace(domain)
 				if domain != "" {
 					directDomains[domain] = struct{}{}
@@ -81,7 +81,7 @@ func JumphostMappingFromClusters(clusters []lieutenant.Cluster) (JumphostMapping
 		if additionalDomains, _, err := c.StringFact(lieutenant.KnownFactJumphostDomains); err != nil {
 			errs = append(errs, fmt.Errorf("failed to get jumphostDomains fact for cluster %s: %w", c.ID, err))
 		} else if additionalDomains != "" {
-			for _, domain := range strings.Split(additionalDomains, ",") {
+			for domain := range strings.SplitSeq(additionalDomains, ",") {
 				domain = strings.TrimSpace(domain)
 				if domain != "" && !hasBaseDomain(domain, baseDomain) {
 					mapping[domain] = jumphost

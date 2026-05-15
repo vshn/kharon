@@ -622,7 +622,7 @@ func configForHost(sshConfig *ssh_config.UserSettings, host string, agent agent.
 		return "", nil, fmt.Errorf("error getting UserKnownHostsFile for host %s: %w", host, err)
 	}
 	akhfs := make([]string, 0)
-	for _, khf := range strings.Fields(khfs) {
+	for khf := range strings.FieldsSeq(khfs) {
 		khf, err := replaceTildeWithHome(khf)
 		if err != nil {
 			return "", nil, fmt.Errorf("error replacing `~/` with home directory for UserKnownHostsFile %s: %w", khf, err)
