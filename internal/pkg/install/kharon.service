@@ -5,7 +5,7 @@ After=network.target
 
 [Service]
 Environment="SSH_AUTH_SOCK=%t/gcr/ssh"
-ExecStart=%h/workspace/kharon/kharon proxy -v=-10 --on-demand=systemd=kharon.socket
+ExecStart={{EXECUTABLE}} proxy -v=-10 --on-demand=systemd=kharon.socket
 
 [Install]
 WantedBy=default.target

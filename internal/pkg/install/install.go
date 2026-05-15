@@ -49,7 +49,7 @@ func InstallLaunchdService() error {
 		return fmt.Errorf("failed to check if launchd service file exists: %w", err)
 	}
 	fmt.Printf("The following launchd service will be installed to %s:\n", color.CyanString(launchdServiceFilePath))
-	fmt.Println(renderLaunchdService(home, binaryPath, "12000", true))
+	fmt.Println(renderUnit(launchdService, home, binaryPath, "12000", true))
 	installAction := "Install launchd service to"
 	if exists {
 		installAction = "Overwrite existing launchd service at"
@@ -62,7 +62,7 @@ func InstallLaunchdService() error {
 	if err := os.MkdirAll(filepath.Dir(launchdServiceFilePath), 0755); err != nil {
 		return fmt.Errorf("failed to create directory for launchd service file: %w", err)
 	}
-	if err := os.WriteFile(launchdServiceFilePath, []byte(renderLaunchdService(home, binaryPath, "12000", false)), 0644); err != nil {
+	if err := os.WriteFile(launchdServiceFilePath, []byte(renderUnit(launchdService, home, binaryPath, "12000", false)), 0644); err != nil {
 		return fmt.Errorf("failed to write launchd service file: %w", err)
 	}
 	launchctlDomain := fmt.Sprintf("gui/%d", os.Getuid())
@@ -83,6 +83,59 @@ func InstallLaunchdService() error {
 }
 
 func InstallSystemdService() error {
+	home, err := userHomeFunc()
+	if err != nil {
+		return fmt.Errorf("failed to get user home directory: %w", err)
+	}
+	binaryPath, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("failed to get executable path: %w", err)
+	}
+
+	systemdServiceFilePath := strings.ReplaceAll(systemdServiceFilePath, "~", home)
+	systemdSocketFilePath := strings.ReplaceAll(systemdSocketFilePath, "~", home)
+
+	for _, unit := range []struct {
+		path    string
+		content string
+	}{
+		{systemdServiceFilePath, systemdService},
+		{systemdSocketFilePath, systemdSocket},
+	} {
+		exists, err := fileExists(unit.path)
+		if err != nil {
+			return fmt.Errorf("failed to check if systemd unit file exists: %w", err)
+		}
+		fmt.Printf("The following systemd unit will be installed to %s:\n", color.CyanString(unit.path))
+		fmt.Println(renderUnit(unit.content, home, binaryPath, "12000", true))
+		installAction := "Install systemd unit to"
+		if exists {
+			installAction = "Overwrite existing systemd unit at"
+		}
+		if !proceedPrompt(fmt.Sprintf("%s %s?", installAction, color.CyanString(unit.path))) {
+			fmt.Println("Installation cancelled.")
+			return nil
+		}
+
+		if err := os.MkdirAll(filepath.Dir(unit.path), 0755); err != nil {
+			return fmt.Errorf("failed to create directory for systemd unit file: %w", err)
+		}
+		if err := os.WriteFile(unit.path, []byte(renderUnit(unit.content, home, binaryPath, "12000", false)), 0644); err != nil {
+			return fmt.Errorf("failed to write systemd unit file: %w", err)
+		}
+	}
+
+	slog.Info("Bootstrapping systemd service")
+	if err := runCommand("systemctl", "--user", "daemon-reload"); err != nil {
+		return fmt.Errorf("failed to reload systemd user daemon: %w", err)
+	}
+	if err := runCommand("systemctl", "--user", "enable", systemdSocketFilePath); err != nil {
+		return fmt.Errorf("failed to enable and start systemd socket: %w", err)
+	}
+	if err := runCommand("systemctl", "--user", "enable", "--now", systemdServiceFilePath); err != nil {
+		return fmt.Errorf("failed to enable and start systemd service: %w", err)
+	}
+
 	return nil
 }
 
@@ -92,17 +145,16 @@ func runCommand(name string, args ...string) error {
 	return cmd.Run()
 }
 
-func renderLaunchdService(home, exe, port string, colorize bool) string {
+func renderUnit(template, home, exe, port string, colorize bool) string {
 	if colorize {
 		home = color.BlueString(home)
 		exe = color.MagentaString(exe)
 		port = color.GreenString(port)
 	}
-	service := launchdService
-	service = strings.ReplaceAll(service, "{{HOME}}", home)
-	service = strings.ReplaceAll(service, "{{EXECUTABLE}}", exe)
-	service = strings.ReplaceAll(service, "{{PORT}}", port)
-	return service
+	template = strings.ReplaceAll(template, "{{HOME}}", home)
+	template = strings.ReplaceAll(template, "{{EXECUTABLE}}", exe)
+	template = strings.ReplaceAll(template, "{{PORT}}", port)
+	return template
 }
 
 func proceedPrompt(question string) bool {

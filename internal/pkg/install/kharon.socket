@@ -3,7 +3,7 @@ Description=Socket for Kharon service activation
 PartOf=kharon.service
 
 [Socket]
-ListenStream=127.0.0.1:12000
+ListenStream=127.0.0.1:{{PORT}}
 
 [Install]
 WantedBy=sockets.target
