@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -34,6 +33,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/vshn/kharon/internal/pkg/cache"
+	"github.com/vshn/kharon/internal/pkg/proxy/mapping"
 )
 
 func Test_jumphostChainForTarget(t *testing.T) {
@@ -99,13 +99,15 @@ func Test_jumphostChainForTarget(t *testing.T) {
 
 func Test_loadHostnameMapping(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "mapping.json")
-	require.NoError(t, cache.WriteProxyMappingFile(path, map[string]string{
-		"c-bettersmarter-prod01.vshnmanaged.net":     "jumphost1",
-		"a.storage.bettersmarter.ch":                 "jumphost4",
-		"api.c-bettersmarter-prod01.vshnmanaged.net": "jumphost2",
-		"vcenter.bettersmarter.ch":                   "jumphost3",
-		"b.storage.bettersmarter.ch":                 "jumphost5",
-		"c.storage.bettersmarter.ch":                 "jumphost6",
+	require.NoError(t, cache.WriteProxyMappingFile(path, mapping.JumphostMapping{
+		DomainToJumphost: map[string]string{
+			"c-bettersmarter-prod01.vshnmanaged.net":     "jumphost1",
+			"a.storage.bettersmarter.ch":                 "jumphost4",
+			"api.c-bettersmarter-prod01.vshnmanaged.net": "jumphost2",
+			"vcenter.bettersmarter.ch":                   "jumphost3",
+			"b.storage.bettersmarter.ch":                 "jumphost5",
+			"c.storage.bettersmarter.ch":                 "jumphost6",
+		},
 	}))
 
 	loaded, err := loadHostnameMapping(path)
@@ -126,7 +128,7 @@ func Test_Start(t *testing.T) {
 	userPubKey, agentSocket := spawnSSHAgent(t)
 	t.Logf("Spawned SSH agent with public key %x at socket %s", userPubKey, agentSocket)
 
-	localDNSResolver := localhostResolverFor(t, "no.hop", "one.hop")
+	localDNSResolver := localhostResolverFor(t, "no.hop", "one.hop", "sub.always.direct", "sub.sub.always.direct")
 	dmz2DNSResolver := localhostResolverFor(t, "two.hops", "jumphost3")
 	dmz3DNSResolver := localhostResolverFor(t, "three.hops")
 	dmz4DNSResolver := localhostResolverFor(t, "after.reload")
@@ -156,11 +158,15 @@ func Test_Start(t *testing.T) {
 	})
 
 	mappingPath := filepath.Join(t.TempDir(), "mapping.json")
-	require.NoError(t, cache.WriteProxyMappingFile(mappingPath, map[string]string{
-		"one.hop":    "jumphost1",
-		"two.hops":   "jumphost2",
-		"three.hops": "jumphost3",
-		"error.hop":  "nonexistent.jumphost",
+	require.NoError(t, cache.WriteProxyMappingFile(mappingPath, mapping.JumphostMapping{
+		DirectAccessDomains: []string{"sub.always.direct"},
+		DomainToJumphost: map[string]string{
+			"one.hop":       "jumphost1",
+			"two.hops":      "jumphost2",
+			"three.hops":    "jumphost3",
+			"error.hop":     "nonexistent.jumphost",
+			"always.direct": "jumphost3",
+		},
 	}), "failed to update hostname mapping")
 
 	sshConfigPath := filepath.Join(t.TempDir(), "ssh_config")
@@ -236,7 +242,7 @@ func Test_Start(t *testing.T) {
 		httpClient.RequireSuccessfulGet(t, "http://no.hop")
 	}, "proxy did not start in time")
 
-	for _, domain := range []string{"no.hop", "one.hop", "two.hops", "three.hops"} {
+	for _, domain := range []string{"sub.always.direct", "sub.sub.always.direct", "no.hop", "one.hop", "two.hops", "three.hops"} {
 		httpClient.RequireSuccessfulGet(t, fmt.Sprintf("http://%s", domain))
 	}
 
@@ -280,11 +286,13 @@ func Test_Start(t *testing.T) {
 	}
 	require.NoError(t, os.WriteFile(sshConfigPath, []byte(b.String()), 0o600))
 
-	require.NoError(t, cache.WriteProxyMappingFile(mappingPath, map[string]string{
-		"one.hop":      "jumphost1",
-		"two.hops":     "jumphost2",
-		"three.hops":   "jumphost3",
-		"after.reload": "jumphost4",
+	require.NoError(t, cache.WriteProxyMappingFile(mappingPath, mapping.JumphostMapping{
+		DomainToJumphost: map[string]string{
+			"one.hop":      "jumphost1",
+			"two.hops":     "jumphost2",
+			"three.hops":   "jumphost3",
+			"after.reload": "jumphost4",
+		},
 	}), "failed to update hostname mapping")
 
 	require.NoError(t, p.Reload(mappingPath), "failed to reload proxy with updated SSH config and hostname mapping")
@@ -308,7 +316,9 @@ func Test_Start_AutomaticShutdown(t *testing.T) {
 	localDNSResolver := localhostResolverFor(t, "no.hop")
 
 	mappingPath := filepath.Join(t.TempDir(), "mapping.json")
-	require.NoError(t, cache.WriteProxyMappingFile(mappingPath, map[string]string{}), "failed to write initial empty mapping file")
+	require.NoError(t, cache.WriteProxyMappingFile(mappingPath, mapping.JumphostMapping{
+		DomainToJumphost: map[string]string{},
+	}), "failed to write initial empty mapping file")
 
 	sshConfigPath := filepath.Join(t.TempDir(), "ssh_config")
 	b := sshConfigBuilder{
@@ -426,14 +436,6 @@ func (c *httpClient) RequireSuccessfulGet(t require.TestingT, urlStr string) {
 	resp.Body.Close()
 
 	require.True(t, resp.StatusCode >= 200 && resp.StatusCode < 300, "expected successful response, got %d", resp.StatusCode)
-}
-
-func requireJSONMarshal(t *testing.T, v any) []byte {
-	t.Helper()
-
-	b, err := json.Marshal(v)
-	require.NoError(t, err)
-	return b
 }
 
 type knownHostEntry struct {
