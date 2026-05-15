@@ -2,15 +2,15 @@ package cmd
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	"net/http"
 	"net/url"
 	"os"
 	"strings"
 
-	userv1typedclient "github.com/openshift/client-go/user/clientset/versioned/typed/user/v1"
 	"github.com/openshift/library-go/pkg/oauth/tokenrequest"
 	"github.com/spf13/cobra"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
@@ -129,13 +129,13 @@ func loginCurrentContext(ctx context.Context) {
 		os.Exit(1)
 	}
 
-	client, err := userv1typedclient.NewForConfig(cfg)
-	if err != nil {
-		slog.Error("Failed to create user client", slog.Any("error", err))
-		os.Exit(1)
+	resp, err := lightSSR(cfg)
+	l := slog.With("error", err)
+	if resp != nil {
+		l = l.With("status", resp.Status)
 	}
-
-	if _, err = client.Users().Get(ctx, "~", metav1.GetOptions{}); err == nil {
+	l.Debug("SelfSubjectReview response")
+	if err == nil && resp.StatusCode == 201 {
 		slog.Info("Already logged in.")
 		return
 	}
@@ -149,6 +149,20 @@ func loginCurrentContext(ctx context.Context) {
 		slog.Error("Failed to insert token into kubeconfig", slog.Any("error", err))
 		os.Exit(1)
 	}
+}
+
+// Including the openshift or kubenetes client more than doubles the size of the binary, so we implement a very minimal version of the SelfSubjectReview API call.
+func lightSSR(cfg *rest.Config) (*http.Response, error) {
+	c, err := rest.HTTPClientFor(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create HTTP client for kubeconfig: %w", err)
+	}
+	url, _, err := rest.DefaultServerUrlFor(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to determine API server URL from kubeconfig: %w", err)
+	}
+	url.Path = "/apis/authentication.k8s.io/v1/selfsubjectreviews"
+	return c.Post(url.String(), "application/json", strings.NewReader(`{"kind":"SelfSubjectReview","apiVersion":"authentication.k8s.io/v1"}`))
 }
 
 func requestToken(ctx context.Context, apiURL string) (string, error) {
