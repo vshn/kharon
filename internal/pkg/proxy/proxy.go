@@ -46,14 +46,14 @@ type Proxy struct {
 	ShutdownTimeout time.Duration
 
 	// dialer is the current dialer to use for incoming connections. It is stored atomically so that it can be replaced on the fly when reloading the configuration.
-	dialer atomic.Pointer[sshDialer]
+	dialer atomic.Pointer[RoutingDialer]
 }
 
 func (p *Proxy) Start(ctx context.Context, lp func() (net.Listener, error), mappingFile string) (err error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	sshDialer, err := buildSSHDialer(p, mappingFile)
+	sshDialer, err := NewRoutingDialer(p.sshConfigOrEmpty(), p.DirectDialer, p.keepAliveInterval(), mappingFile)
 	if err != nil {
 		return fmt.Errorf("failed to build SSH dialer: %w", err)
 	}
@@ -70,7 +70,7 @@ func (p *Proxy) Start(ctx context.Context, lp func() (net.Listener, error), mapp
 		},
 		Dialer: func(ctx context.Context, network, addr string) (net.Conn, error) {
 			slog.Debug("New SOCKS5 connection", slog.String("network", network), slog.String("addr", addr))
-			return p.dialer.Load().dial(ctx, network, addr)
+			return p.dialer.Load().DialContext(ctx, network, addr)
 		},
 	}
 	listener, err := lp()
@@ -129,7 +129,7 @@ func (p *Proxy) Reload(mappingFile string) error {
 		return fmt.Errorf("proxy is not running")
 	}
 
-	newDialer, err := buildSSHDialer(p, mappingFile)
+	newDialer, err := NewRoutingDialer(p.sshConfigOrEmpty(), p.DirectDialer, p.keepAliveInterval(), mappingFile)
 	if err != nil {
 		return fmt.Errorf("failed to build new SSH dialer: %w", err)
 	}
@@ -141,6 +141,13 @@ func (p *Proxy) Reload(mappingFile string) error {
 		// Just close the new dialer and keep the current one running.
 		return newDialer.Close()
 	}
+}
+
+func (p *Proxy) sshConfigOrEmpty() *ssh_config.UserSettings {
+	if p.SSHConfig != nil {
+		return p.SSHConfig()
+	}
+	return &ssh_config.UserSettings{}
 }
 
 // keepAliveInterval returns the keep-alive interval to use for SSH connections, defaulting to 3 seconds if not set.
@@ -189,7 +196,8 @@ type hostSuffixJumphostMapping struct {
 	Jumphost   string
 }
 
-type sshDialer struct {
+// RoutingDialer is a custom dialer that routes connections through SSH jumphosts based on the destination hostname and the provided SSH configuration.
+type RoutingDialer struct {
 	sshManagersMux sync.Mutex
 	sshManagers    map[string]*clientMgr
 
@@ -205,16 +213,13 @@ type sshDialer struct {
 	keepAliveInterval time.Duration
 }
 
-func buildSSHDialer(p *Proxy, mappingFile string) (*sshDialer, error) {
+// NewRoutingDialer creates a new RoutingDialer with the given SSH configuration, direct dialer, keep-alive interval, and hostname mapping file.
+func NewRoutingDialer(sshConfig *ssh_config.UserSettings, direct net.Dialer, tunnelKeepAliveInterval time.Duration, mappingFile string) (*RoutingDialer, error) {
 	hostnameMapping, err := loadHostnameMapping(mappingFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load hostname mapping: %w", err)
 	}
 
-	var sshConfig *ssh_config.UserSettings
-	if p.SSHConfig != nil {
-		sshConfig = p.SSHConfig()
-	}
 	if sshConfig == nil {
 		sshConfig = &ssh_config.UserSettings{}
 	}
@@ -248,7 +253,7 @@ func buildSSHDialer(p *Proxy, mappingFile string) (*sshDialer, error) {
 	}
 
 	agentClient := agent.NewClient(sshAgentConn)
-	return &sshDialer{
+	return &RoutingDialer{
 		agentConn:       sshAgentConn,
 		agent:           agentClient,
 		hostnameMapping: hostnameMapping,
@@ -256,12 +261,12 @@ func buildSSHDialer(p *Proxy, mappingFile string) (*sshDialer, error) {
 		sshManagers: make(map[string]*clientMgr),
 
 		sshSettings:       sshConfig,
-		directDialer:      p.DirectDialer,
-		keepAliveInterval: p.keepAliveInterval(),
+		directDialer:      direct,
+		keepAliveInterval: tunnelKeepAliveInterval,
 	}, nil
 }
 
-func (d *sshDialer) Close() error {
+func (d *RoutingDialer) Close() error {
 	d.sshManagersMux.Lock()
 	defer d.sshManagersMux.Unlock()
 
@@ -329,36 +334,40 @@ func (m *clientMgr) GetClient(ctx context.Context) (*ssh.Client, error) {
 		return nil, fmt.Errorf("error dialing jumphost chain %s: %w", strings.Join(jumphosts, "->"), err)
 	}
 
-	keepAliveStopper, stopKeepAlive := context.WithCancel(context.Background())
-	kat := time.NewTicker(m.KeepAliveInterval)
-	go func() {
-		defer kat.Stop()
-		for {
-			select {
-			case <-kat.C:
-				if err := sendKeepAlive(sshc, m.KeepAliveInterval); err != nil {
-					slog.Warn("SSH keepalive failed", slog.String("jumphost", m.Jumphost), slog.Any("error", err))
-					kat.Stop()
+	stopKeepAlive := func() {}
+	if m.KeepAliveInterval > 0 {
+		keepAliveStopper, ska := context.WithCancel(context.Background())
+		stopKeepAlive = ska
+		kat := time.NewTicker(m.KeepAliveInterval)
+		go func() {
+			defer kat.Stop()
+			for {
+				select {
+				case <-kat.C:
+					if err := sendKeepAlive(sshc, m.KeepAliveInterval); err != nil {
+						slog.Warn("SSH keepalive failed", slog.String("jumphost", m.Jumphost), slog.Any("error", err))
+						kat.Stop()
 
-					m.clientMux.Lock()
-					if keepAliveStopper.Err() != nil || m.client != sshc {
-						// Keep-alive loop already stopped or client was replaced, just unlock and return.
+						m.clientMux.Lock()
+						if keepAliveStopper.Err() != nil || m.client != sshc {
+							// Keep-alive loop already stopped or client was replaced, just unlock and return.
+							m.clientMux.Unlock()
+							return
+						}
+						if err := m.clientCleanup(); err != nil {
+							slog.Error("Error during SSH client cleanup", slog.String("jumphost", m.Jumphost), slog.Any("error", err))
+						}
+						m.client = nil
+						m.clientCleanup = nil
 						m.clientMux.Unlock()
 						return
 					}
-					if err := m.clientCleanup(); err != nil {
-						slog.Error("Error during SSH client cleanup", slog.String("jumphost", m.Jumphost), slog.Any("error", err))
-					}
-					m.client = nil
-					m.clientCleanup = nil
-					m.clientMux.Unlock()
+				case <-keepAliveStopper.Done():
 					return
 				}
-			case <-keepAliveStopper.Done():
-				return
 			}
-		}
-	}()
+		}()
+	}
 
 	m.client = sshc
 	m.clientCleanup = func() error {
@@ -395,7 +404,7 @@ func sendKeepAlive(sshc *ssh.Client, timeout time.Duration) error {
 	}
 }
 
-func (d *sshDialer) jumphostForHost(hostname string) string {
+func (d *RoutingDialer) jumphostForHost(hostname string) string {
 	if jh, ok := d.routes.Load(hostname); ok {
 		return jh.(string)
 	}
@@ -418,7 +427,9 @@ func (d *sshDialer) jumphostForHost(hostname string) string {
 	return jumphost
 }
 
-func (d *sshDialer) dial(ctx context.Context, network, addr string) (net.Conn, error) {
+// DialContext connects to the address on the named network using the provided context.
+// It determines the appropriate SSH jumphost based on the destination hostname and routes the connection through it if necessary.
+func (d *RoutingDialer) DialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	hostname, _, err := net.SplitHostPort(addr)
 	if err != nil {
 		return nil, fmt.Errorf("error splitting host and port for %s: %w", addr, err)
