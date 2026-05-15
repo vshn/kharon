@@ -33,7 +33,7 @@ func Test_FromClusters_Encode(t *testing.T) {
 				lieutenant.KnownDynamicFactOpenshiftApiURL: "https://api.c-example-2.vshnmanaged.net:6443",
 			},
 		},
-	}, ""), &res))
+	}, "socks5://localhost:12000", ""), &res))
 	resultJSON, err := yaml.YAMLToJSONStrict(res.Bytes())
 	require.NoError(t, err)
 
@@ -42,13 +42,15 @@ func Test_FromClusters_Encode(t *testing.T) {
 	"clusters": [
 		{
 			"cluster": {
-				"server": "https://api.c-example-2.vshnmanaged.net:6443"
+				"server": "https://api.c-example-2.vshnmanaged.net:6443",
+				"proxy-url": "socks5://localhost:12000"
 			},
 			"name": "c-example-2"
 		},
 		{
 			"cluster": {
-				"server": "https://api.c-test-1.vshnmanaged.net:6443"
+				"server": "https://api.c-test-1.vshnmanaged.net:6443",
+				"proxy-url": "socks5://localhost:12000"
 			},
 			"name": "c-test-1"
 		}
@@ -79,7 +81,7 @@ func Test_FromClusters_Encode(t *testing.T) {
 
 func Test_FromClusters_CurrentContext(t *testing.T) {
 	t.Run("context provided", func(t *testing.T) {
-		kc := kubeconfig.FromClusters([]lieutenant.Cluster{}, "wanted-context")
+		kc := kubeconfig.FromClusters([]lieutenant.Cluster{}, "", "wanted-context")
 		require.Equal(t, "wanted-context", kc.CurrentContext)
 	})
 
@@ -94,7 +96,7 @@ func Test_FromClusters_CurrentContext(t *testing.T) {
 					lieutenant.KnownDynamicFactOpenshiftApiURL: "https://api.c-example-2.vshnmanaged.net:6443",
 				},
 			},
-		}, "")
+		}, "", "")
 		require.Equal(t, "c-example-2", kc.CurrentContext)
 	})
 }
@@ -111,7 +113,8 @@ func Test_InsertConnectionInfoIntoKubeconfig(t *testing.T) {
 			expectedKubeconfig: func() *kubeconfig.Config {
 				kc := kcapi.NewConfig()
 				kc.Clusters["test-context"] = &kcapi.Cluster{
-					Server: "https://api.test-cluster.vshnmanaged.net:6443",
+					Server:   "https://api.test-cluster.vshnmanaged.net:6443",
+					ProxyURL: "socks5://localhost:12000",
 				}
 				kc.CurrentContext = "test-context"
 				kc.AuthInfos["test-context/kharon-login"] = &kcapi.AuthInfo{
@@ -129,7 +132,8 @@ func Test_InsertConnectionInfoIntoKubeconfig(t *testing.T) {
 			expectedKubeconfig: func() *kubeconfig.Config {
 				kc := kcapi.NewConfig()
 				kc.Clusters["api-test-cluster-vshnmanaged-net:6443"] = &kcapi.Cluster{
-					Server: "https://api.test-cluster.vshnmanaged.net:6443",
+					Server:   "https://api.test-cluster.vshnmanaged.net:6443",
+					ProxyURL: "socks5://localhost:12000",
 				}
 				kc.CurrentContext = "api-test-cluster-vshnmanaged-net:6443"
 				kc.AuthInfos["api-test-cluster-vshnmanaged-net:6443/kharon-login"] = &kcapi.AuthInfo{
@@ -149,7 +153,7 @@ func Test_InsertConnectionInfoIntoKubeconfig(t *testing.T) {
 			td := t.TempDir()
 			kubeconfigPath := td + "/kubeconfig"
 			t.Setenv("KUBECONFIG", kubeconfigPath)
-			require.NoError(t, kubeconfig.InsertConnectionInfoIntoKubeconfig(tc.contextName, "https://api.test-cluster.vshnmanaged.net:6443", "test-token"))
+			require.NoError(t, kubeconfig.InsertConnectionInfoIntoKubeconfig(tc.contextName, "https://api.test-cluster.vshnmanaged.net:6443", "socks5://localhost:12000", "test-token"))
 
 			kubeConfig, err := new(clientcmd.ClientConfigLoadingRules{ExplicitPath: kubeconfigPath}).Load()
 			require.NoError(t, err)
@@ -279,6 +283,78 @@ func Test_InsertTokenIntoCurrentContext(t *testing.T) {
 			require.NoError(t, err)
 			if diff := cmp.Diff(kubeConfig, tc.expectedKubeconfig, kubeconfigDiffOptions()); diff != "" {
 				t.Errorf("kubeConfig mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func Test_CurrentClusterConfig(t *testing.T) {
+	tcs := []struct {
+		name                  string
+		startingKubeconfig    *kubeconfig.Config
+		expectedClusterConfig *kcapi.Cluster
+		wantErr               string
+	}{
+		{
+			name:               "empty kubeconfig",
+			startingKubeconfig: kcapi.NewConfig(),
+			wantErr:            "no current context set in kubeconfig or current context is invalid",
+		}, {
+			name: "context not found in kubeconfig",
+			startingKubeconfig: func() *kubeconfig.Config {
+				kc := kcapi.NewConfig()
+				kc.CurrentContext = "other-context"
+				return kc
+			}(),
+			wantErr: "no current context set in kubeconfig or current context is invalid",
+		}, {
+			name: "referenced cluster not found in kubeconfig",
+			startingKubeconfig: func() *kubeconfig.Config {
+				kc := kcapi.NewConfig()
+				kc.CurrentContext = "test-context"
+				kc.Contexts["test-context"] = &kcapi.Context{
+					Cluster: "other-cluster",
+				}
+				return kc
+			}(),
+			wantErr: "cluster referenced by current context not found in kubeconfig",
+		}, {
+			name: "cluster referenced and exists",
+			startingKubeconfig: func() *kubeconfig.Config {
+				clusterName := "cluster1"
+				kc := kcapi.NewConfig()
+				kc.Clusters[clusterName] = &kcapi.Cluster{
+					Server: "https://api.test-cluster.vshnmanaged.net:6443",
+				}
+				kc.CurrentContext = clusterName
+				kc.Contexts[clusterName] = &kcapi.Context{
+					Cluster: clusterName,
+				}
+				return kc
+			}(),
+			expectedClusterConfig: func() *kcapi.Cluster {
+				return &kcapi.Cluster{
+					Server: "https://api.test-cluster.vshnmanaged.net:6443",
+				}
+			}(),
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			td := t.TempDir()
+			kubeconfigPath := td + "/kubeconfig"
+			require.NoError(t, clientcmd.WriteToFile(*tc.startingKubeconfig, kubeconfigPath))
+			t.Setenv("KUBECONFIG", kubeconfigPath)
+
+			clusterConfig, err := kubeconfig.CurrentClusterConfig()
+			if tc.wantErr != "" {
+				require.ErrorContains(t, err, tc.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			if diff := cmp.Diff(clusterConfig, tc.expectedClusterConfig, kubeconfigDiffOptions()); diff != "" {
+				t.Errorf("clusterConfig mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}

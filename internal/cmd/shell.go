@@ -33,6 +33,7 @@ func init() {
 
 	flag := shellCmd.Flags()
 	flag.StringVar(&clustersInventoryFile, "inventory-file", inventoryFilePath(), "Path to the inventory file that should be used by this command.")
+	flag.StringVar(&proxyAddr, "proxy-addr", defaultProxyAddr, "Address of the proxy to use in the generated kubeconfig file.")
 }
 
 var shellCmd = &cobra.Command{
@@ -77,7 +78,8 @@ func runShell(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	tmpKubeconfig, err := writeKubeconfigToTempFile(kubeconfig.FromClusters(clusters, clusterID))
+	// Kubeconfig wants a socks5 url not socks5h, but they are treated the same by Go.
+	tmpKubeconfig, err := writeKubeconfigToTempFile(kubeconfig.FromClusters(clusters, fmt.Sprintf("socks5://%s", proxyAddr), clusterID))
 	if err != nil {
 		slog.Error("Failed to write kubeconfig to temporary file", "error", err)
 		exitCode = 1
