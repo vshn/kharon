@@ -139,6 +139,14 @@ func InstallSystemdService() error {
 	return nil
 }
 
+func ShellCompletionNotice() {
+	fmt.Println(color.GreenString("Kharon supports shell completion."))
+	fmt.Println("To enable shell completion, add the following line to your shell configuration file (e.g., ~/.bashrc or ~/.zshrc):")
+	fmt.Println(color.CyanString("source <(kharon completion bash)  # for bash"))
+	fmt.Println(color.CyanString("source <(kharon completion zsh)   # for zsh"))
+	fmt.Println(color.CyanString("kharon completion fish | source   # for fish"))
+}
+
 func runCommand(name string, args ...string) error {
 	color.New(color.Bold).Printf("> %s %s\n", name, strings.Join(args, " "))
 	cmd := exec.Command(name, args...)

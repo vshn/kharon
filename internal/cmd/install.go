@@ -9,21 +9,21 @@ import (
 	"github.com/vshn/kharon/internal/pkg/install"
 )
 
-const installCmdLongDesc = `TODO: Add long description for the install command.`
+const installCmdLongDesc = `Install kharon systemd or launchd services depending on the operating system.
+The command will create the necessary service files to enable the kharon proxy as a background service.
+
+The proxy will be installed as a user service (systemctl --user, launchctl gui/<uid>).
+The proxy will be configured with on-demand activation and only be started when a connection to the proxy socket is made.`
 
 const installCmdExample = `# Install kharon
 kharon install`
 
 func init() {
 	RootCmd.AddCommand(installCmd)
-
-	flag := installCmd.Flags()
-	flag.StringVar(&clustersInventoryFile, "inventory-file", inventoryFilePath(), "Path to the inventory file that should be used by this command.")
-	flag.StringVar(&proxyAddr, "proxy-addr", defaultProxyAddr, "Address of the proxy to use in the generated kubeconfig file.")
 }
 
 var installCmd = &cobra.Command{
-	Use:     "install [c-cluster-id]",
+	Use:     "install",
 	Short:   "Install kharon systemd/launchd services.",
 	Long:    installCmdLongDesc,
 	Example: installCmdExample,
@@ -47,4 +47,5 @@ func runInstall(cmd *cobra.Command, args []string) {
 		slog.Error("Unsupported operating system for installation, supported OS are Linux (with systemd) and MacOS", "os", runtime.GOOS)
 		os.Exit(1)
 	}
+	install.ShellCompletionNotice()
 }
