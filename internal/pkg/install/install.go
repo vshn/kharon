@@ -148,7 +148,7 @@ func ShellCompletionNotice() {
 }
 
 func runCommand(name string, args ...string) error {
-	color.New(color.Bold).Printf("> %s %s\n", name, strings.Join(args, " "))
+	_, _ = color.New(color.Bold).Printf("> %s %s\n", name, strings.Join(args, " "))
 	cmd := exec.Command(name, args...)
 	return cmd.Run()
 }
