@@ -13,6 +13,7 @@ import (
 
 	"github.com/vshn/kharon/internal/pkg/cache"
 	"github.com/vshn/kharon/internal/pkg/lieutenant"
+	"github.com/vshn/kharon/internal/pkg/proxy/mapping"
 )
 
 const defaultLieutenantURL = "https://api.syn.vshn.net"
@@ -58,7 +59,7 @@ func runUpdate(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 	slog.Info("Wrote cluster inventory to file.", "file", updateInventoryFile)
-	mapping, err := lieutenant.JumphostMappingFromClusters(clusters)
+	mapping, err := mapping.JumphostMappingFromClusters(clusters)
 	if err != nil {
 		slog.Warn("Jumphost mapping may be incomplete", "error", err)
 	}

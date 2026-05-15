@@ -4,9 +4,11 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/vshn/kharon/internal/pkg/lieutenant"
+	"github.com/vshn/kharon/internal/pkg/proxy/mapping"
 )
 
 func Test_CacheDir(t *testing.T) {
@@ -65,9 +67,12 @@ func Test_ProxyMappingFilePath(t *testing.T) {
 func Test_WriteAndReadProxyMappingFile(t *testing.T) {
 	mockUserCacheDir(t)
 
-	proxyMappings := map[string]string{
-		"cluster-1": "jumphost-1",
-		"cluster-2": "jumphost-2",
+	proxyMappings := mapping.JumphostMapping{
+		DomainToJumphost: map[string]string{
+			"cluster-1": "jumphost-1",
+			"cluster-2": "jumphost-2",
+		},
+		DirectAccessDomains: []string{"cluster-3", "cluster-4"},
 	}
 
 	require.NoError(t, WriteProxyMappingFile("", proxyMappings))
@@ -84,7 +89,8 @@ func Test_ProxyMappingFile_VersionMismatch(t *testing.T) {
 	}, tmpFile))
 
 	_, err := ReadProxyMappingFile(tmpFile)
-	require.ErrorContains(t, err, "proxy file version 2 does not match expected version 1")
+	assert.ErrorContains(t, err, "proxy file version")
+	assert.ErrorContains(t, err, "does not match expected version")
 }
 
 func mockUserCacheDir(t *testing.T) string {

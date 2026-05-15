@@ -158,8 +158,8 @@ func loadHostnameMapping(mappingFile string) ([]hostSuffixJumphostMapping, error
 	if err != nil {
 		return nil, fmt.Errorf("failed to read proxy mapping file. You might need to run the `update` command first.: %w", err)
 	}
-	hostnameMapping := make([]hostSuffixJumphostMapping, 0, len(hmp))
-	for h, jh := range hmp {
+	hostnameMapping := make([]hostSuffixJumphostMapping, 0, len(hmp.DomainToJumphost))
+	for h, jh := range hmp.DomainToJumphost {
 		hostnameMapping = append(hostnameMapping, hostSuffixJumphostMapping{
 			HostSuffix: h,
 			Jumphost:   jh,
@@ -169,6 +169,17 @@ func loadHostnameMapping(mappingFile string) ([]hostSuffixJumphostMapping, error
 	slices.SortFunc(hostnameMapping, func(a, b hostSuffixJumphostMapping) int {
 		return 10*(len(b.HostSuffix)-len(a.HostSuffix)) + strings.Compare(a.HostSuffix, b.HostSuffix)
 	})
+
+	// Add direct access domain at the front of the list with empty jumphost, so that they are preferred over any domain mappings.
+	direct := make([]hostSuffixJumphostMapping, len(hmp.DirectAccessDomains))
+	for i, d := range hmp.DirectAccessDomains {
+		direct[i] = hostSuffixJumphostMapping{
+			HostSuffix: d,
+			Jumphost:   "",
+		}
+	}
+	hostnameMapping = append(direct, hostnameMapping...)
+
 	l.Info("Loaded hostname mappings", slog.Int("mappings", len(hostnameMapping)))
 	return hostnameMapping, nil
 }
