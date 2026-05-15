@@ -15,6 +15,16 @@ import (
 	"github.com/vshn/kharon/internal/pkg/lieutenant/login"
 )
 
+const (
+	KnownDynamicFactOpenshiftApiURL     = "openshiftApiURL"
+	KnownDynamicFactOpenshiftConsoleURL = "openshiftConsoleURL"
+	KnownDynamicFactOpenshiftBaseDomain = "openshiftBaseDomain"
+	KnownDynamicFactOpenshiftAppsDomain = "openshiftAppsDomain"
+
+	KnownFactJumphost        = "jumphost"
+	KnownFactJumphostDomains = "jumphostDomains"
+)
+
 type Cluster struct {
 	ID           string         `json:"id"`
 	DisplayName  string         `json:"displayName"`
@@ -92,7 +102,7 @@ func JumphostMappingFromClusters(clusters []Cluster) (map[string]string, error) 
 	mapping := make(map[string]string)
 	var errs []error
 	for _, c := range clusters {
-		jumphost, _, err := c.StringFact("jumphost")
+		jumphost, _, err := c.StringFact(KnownFactJumphost)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("failed to get jumphost fact for cluster %s: %w", c.ID, err))
 			continue
@@ -101,7 +111,7 @@ func JumphostMappingFromClusters(clusters []Cluster) (map[string]string, error) 
 			continue
 		}
 
-		baseDomain, _, err := c.DynamicStringFact("openshiftBaseDomain")
+		baseDomain, _, err := c.DynamicStringFact(KnownDynamicFactOpenshiftBaseDomain)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("failed to get openshiftBaseDomain dynamic fact for cluster %s: %w", c.ID, err))
 		} else if baseDomain == "" {
@@ -109,12 +119,12 @@ func JumphostMappingFromClusters(clusters []Cluster) (map[string]string, error) 
 		} else {
 			mapping[baseDomain] = jumphost
 		}
-		if appsDomain, _, err := c.DynamicStringFact("openshiftAppsDomain"); err != nil {
+		if appsDomain, _, err := c.DynamicStringFact(KnownDynamicFactOpenshiftAppsDomain); err != nil {
 			errs = append(errs, fmt.Errorf("failed to get openshiftAppsDomain dynamic fact for cluster %s: %w", c.ID, err))
 		} else if appsDomain != "" && !hasBaseDomain(appsDomain, baseDomain) {
 			mapping[appsDomain] = jumphost
 		}
-		if apiUrl, _, err := c.DynamicStringFact("openshiftApiURL"); err != nil {
+		if apiUrl, _, err := c.DynamicStringFact(KnownDynamicFactOpenshiftApiURL); err != nil {
 			errs = append(errs, fmt.Errorf("failed to get openshiftApiURL dynamic fact for cluster %s: %w", c.ID, err))
 		} else if apiUrl != "" {
 			u, err := url.Parse(apiUrl)
@@ -124,7 +134,7 @@ func JumphostMappingFromClusters(clusters []Cluster) (map[string]string, error) 
 				mapping[domain] = jumphost
 			}
 		}
-		if consoleUrl, _, err := c.DynamicStringFact("openshiftConsoleURL"); err != nil {
+		if consoleUrl, _, err := c.DynamicStringFact(KnownDynamicFactOpenshiftConsoleURL); err != nil {
 			errs = append(errs, fmt.Errorf("failed to get openshiftConsoleURL dynamic fact for cluster %s: %w", c.ID, err))
 		} else if consoleUrl != "" {
 			u, err := url.Parse(consoleUrl)
@@ -134,7 +144,7 @@ func JumphostMappingFromClusters(clusters []Cluster) (map[string]string, error) 
 				mapping[domain] = jumphost
 			}
 		}
-		if additionalDomains, _, err := c.StringFact("jumphostDomains"); err != nil {
+		if additionalDomains, _, err := c.StringFact(KnownFactJumphostDomains); err != nil {
 			errs = append(errs, fmt.Errorf("failed to get jumphostDomains fact for cluster %s: %w", c.ID, err))
 		} else if additionalDomains != "" {
 			for _, domain := range strings.Split(additionalDomains, ",") {

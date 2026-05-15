@@ -10,8 +10,23 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/vshn/kharon/internal/pkg/cache"
+	"github.com/vshn/kharon/internal/pkg/completion"
 	"github.com/vshn/kharon/internal/pkg/kubeconfig"
+	"github.com/vshn/kharon/internal/pkg/lieutenant"
 )
+
+const shellCmdLongDesc = `Run a shell with a kubeconfig generated from the inventory, set up to use the proxy.
+The generated kubeconfig contains all clusters from the inventory with an OpenShift API URL.
+The kubeconfig context can be set to a specific cluster by providing the cluster ID as the first argument.
+If no argument is provided, the context is set to the first found cluster with a valid OpenShift API URL.
+
+Works on the inventory downloaded by the 'update' command, so it does not require access to the Lieutenant API.`
+
+const shellCmdExample = `# Get a shell
+kharon shell
+
+# Get a shell for a specific cluster
+kharon shell c-12345`
 
 func init() {
 	RootCmd.AddCommand(shellCmd)
@@ -21,16 +36,27 @@ func init() {
 }
 
 var shellCmd = &cobra.Command{
-	Use:   "shell",
-	Short: "Run a shell with kubeconfig set up to use the proxy.",
-	Long:  "Run a shell with kubeconfig set up to use the proxy. Works on the inventory downloaded by the `update` command, so it does not require access to the Lieutenant API.",
-	Run:   runShell,
+	Use:     "shell [c-cluster-id]",
+	Short:   "Run a shell with a kubeconfig generated from the inventory, set up to use the proxy.",
+	Long:    shellCmdLongDesc,
+	Example: shellCmdExample,
+	Run:     runShell,
+	Args:    cobra.MaximumNArgs(1),
+	ValidArgsFunction: completion.ClusterID(clustersInventoryFile, func(cluster lieutenant.Cluster) bool {
+		api, _, _ := cluster.DynamicStringFact(lieutenant.KnownDynamicFactOpenshiftApiURL)
+		return api != ""
+	}),
 }
 
-func runShell(cmd *cobra.Command, _ []string) {
+func runShell(cmd *cobra.Command, args []string) {
 	// Allows deferred functions to be run for cleanup.
 	exitCode := 0
 	defer func() { os.Exit(exitCode) }()
+
+	var clusterID string
+	if len(args) > 0 {
+		clusterID = args[0]
+	}
 
 	if clustersInventoryFile == "" {
 		slog.Error("Inventory file path is required", "error", "inventory-file flag is empty and failed to determine default path.")
@@ -51,7 +77,7 @@ func runShell(cmd *cobra.Command, _ []string) {
 		return
 	}
 
-	tmpKubeconfig, err := writeKubeconfigToTempFile(kubeconfig.FromClusters(clusters))
+	tmpKubeconfig, err := writeKubeconfigToTempFile(kubeconfig.FromClusters(clusters, clusterID))
 	if err != nil {
 		slog.Error("Failed to write kubeconfig to temporary file", "error", err)
 		exitCode = 1
