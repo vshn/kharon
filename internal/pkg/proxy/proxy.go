@@ -313,8 +313,7 @@ func (m *clientMgr) GetClient(ctx context.Context) (*ssh.Client, error) {
 		})
 	}
 
-	target := configs[len(configs)-1]
-	sshc, cleanupSSHC, err := dialViaProxyJump(target.Addr, target.Config, configs[:len(configs)-1])
+	sshc, cleanupSSHC, err := dialThroughJumps(configs)
 	if err != nil {
 		return nil, fmt.Errorf("error dialing jumphost chain %s: %w", strings.Join(jumphosts, "->"), err)
 	}
@@ -446,75 +445,118 @@ type sshJump struct {
 	Config *ssh.ClientConfig
 }
 
-// TODO(bastjan) This is horrible AI code. Refactor to be more readable.
-func dialViaProxyJump(targetAddr string, targetConfig *ssh.ClientConfig, jumps []sshJump) (*ssh.Client, func() error, error) {
+// dialThroughJumps establishes an SSH client connection through a chain of jumphost proxies.
+// It connects sequentially through each jump in the chain, then to the target.
+// Returns the target SSH client, a cleanup function, and any error.
+func dialThroughJumps(jumps []sshJump) (*ssh.Client, func() error, error) {
 	if len(jumps) == 0 {
-		c, err := ssh.Dial("tcp", targetAddr, targetConfig)
-		if err != nil {
-			return nil, nil, fmt.Errorf("error connecting target %s: %w", targetAddr, err)
+		return nil, nil, fmt.Errorf("no jumphosts provided")
+	}
+	if len(jumps) == 1 {
+		return dialDirectTarget(jumps[0].Addr, jumps[0].Config)
+	}
+	target := jumps[len(jumps)-1]
+	jumps = jumps[:len(jumps)-1]
+
+	// Connect through the jumphost chain
+	chain := &clientChain{}
+	for _, jump := range jumps {
+		if err := chain.connectJump(jump.Addr, jump.Config); err != nil {
+			return nil, nil, multierr.Append(err, chain.closeAll())
 		}
-		return c, c.Close, nil
 	}
 
-	clients := make([]*ssh.Client, 0, len(jumps)+1)
-
-	closeAll := func() error {
-		errs := make([]error, len(clients))
-		for i := len(clients) - 1; i >= 0; i-- {
-			errs[i] = clients[i].Close()
-		}
-		return multierr.Combine(errs...)
-	}
-
-	currentClient, err := ssh.Dial("tcp", jumps[0].Addr, jumps[0].Config)
+	// Connect to final target
+	targetClient, err := chain.dialTargetThroughChain(target.Addr, target.Config)
 	if err != nil {
-		return nil, nil, fmt.Errorf("error connecting jump 0 (%s): %w", jumps[0].Addr, err)
-	}
-	clients = append(clients, currentClient)
-
-	for i := 1; i < len(jumps); i++ {
-		nextConn, err := currentClient.Dial("tcp", jumps[i].Addr)
-		if err != nil {
-			return nil, nil, multierr.Combine(
-				closeAll(),
-				fmt.Errorf("error dialing jump %d (%s): %w", i, jumps[i].Addr, err),
-			)
-		}
-
-		sshConn, chans, reqs, err := ssh.NewClientConn(nextConn, jumps[i].Addr, jumps[i].Config)
-		if err != nil {
-			return nil, nil, multierr.Combine(
-				nextConn.Close(),
-				closeAll(),
-				fmt.Errorf("error creating client for jump %d (%s): %w", i, jumps[i].Addr, err),
-			)
-		}
-
-		currentClient = ssh.NewClient(sshConn, chans, reqs)
-		clients = append(clients, currentClient)
+		return nil, nil, multierr.Append(err, chain.closeAll())
 	}
 
-	targetConn, err := currentClient.Dial("tcp", targetAddr)
+	return targetClient, chain.closeAll, nil
+}
+
+// clientChain manages a chain of SSH clients for establishing connections through jumphost proxies.
+type clientChain struct {
+	clients []*ssh.Client
+}
+
+// connectJump establishes an SSH connection to the next jump in the chain, either directly or through the last client in the chain.
+func (c *clientChain) connectJump(addr string, config *ssh.ClientConfig) error {
+	if len(c.clients) == 0 {
+		return c.dialInitialJump(addr, config)
+	}
+	lastClient := c.clients[len(c.clients)-1]
+	return c.dialThroughJump(lastClient, addr, config)
+}
+
+// dialInitialJump establishes the initial SSH connection to the first jump in the chain.
+func (c *clientChain) dialInitialJump(addr string, config *ssh.ClientConfig) error {
+	client, err := ssh.Dial("tcp", addr, config)
 	if err != nil {
-		return nil, nil, multierr.Combine(
-			closeAll(),
-			fmt.Errorf("error dialing target %s through jumps: %w", targetAddr, err),
+		return fmt.Errorf("error connecting first jump %q: %w", addr, err)
+	}
+	c.clients = append(c.clients, client)
+	return nil
+}
+
+// dialThroughJump establishes an SSH connection through the current client in the chain to the next jump.
+func (c *clientChain) dialThroughJump(jump *ssh.Client, addr string, config *ssh.ClientConfig) error {
+	conn, err := jump.Dial("tcp", addr)
+	if err != nil {
+		return fmt.Errorf("error dialing jump %q through %q: %w", addr, jump.RemoteAddr().String(), err)
+	}
+
+	sshConn, chans, reqs, err := ssh.NewClientConn(conn, addr, config)
+	if err != nil {
+		return multierr.Combine(
+			fmt.Errorf("error creating client for jump %q through %q: %w", addr, jump.RemoteAddr().String(), err),
+			conn.Close(),
 		)
 	}
 
-	sshConn, chans, reqs, err := ssh.NewClientConn(targetConn, targetAddr, targetConfig)
+	client := ssh.NewClient(sshConn, chans, reqs)
+	c.clients = append(c.clients, client)
+	return nil
+}
+
+// dialTargetThroughChain establishes an SSH connection to the final target through the chain.
+func (c *clientChain) dialTargetThroughChain(targetAddr string, targetConfig *ssh.ClientConfig) (*ssh.Client, error) {
+	lastClient := c.clients[len(c.clients)-1]
+
+	conn, err := lastClient.Dial("tcp", targetAddr)
 	if err != nil {
-		return nil, nil, multierr.Combine(
-			targetConn.Close(),
-			closeAll(),
-			fmt.Errorf("error creating ssh client for target %s: %w", targetAddr, err),
+		return nil, fmt.Errorf("error dialing target %q through %q: %w", targetAddr, lastClient.RemoteAddr().String(), err)
+	}
+
+	sshConn, chans, reqs, err := ssh.NewClientConn(conn, targetAddr, targetConfig)
+	if err != nil {
+		return nil, multierr.Combine(
+			fmt.Errorf("error creating ssh client for target %q through %q: %w", targetAddr, lastClient.RemoteAddr().String(), err),
+			conn.Close(),
 		)
 	}
 
 	targetClient := ssh.NewClient(sshConn, chans, reqs)
-	clients = append(clients, targetClient)
+	c.clients = append(c.clients, targetClient)
+	return targetClient, nil
+}
 
-	return targetClient, closeAll, nil
+// closeAll closes all clients in the chain in reverse order.
+func (c *clientChain) closeAll() error {
+	errs := make([]error, 0, len(c.clients))
+	for _, client := range slices.Backward(c.clients) {
+		errs = append(errs, client.Close())
+	}
+	return multierr.Combine(errs...)
+}
+
+// dialDirectTarget establishes a direct SSH connection without proxy jumps.
+func dialDirectTarget(addr string, config *ssh.ClientConfig) (*ssh.Client, func() error, error) {
+	c, err := ssh.Dial("tcp", addr, config)
+	if err != nil {
+		return nil, nil, fmt.Errorf("error connecting target %q: %w", addr, err)
+	}
+	return c, c.Close, nil
 }
 
 func configForHost(sshConfig *ssh_config.UserSettings, host string, agent agent.ExtendedAgent) (string, *ssh.ClientConfig, error) {
