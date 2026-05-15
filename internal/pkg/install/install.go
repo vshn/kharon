@@ -4,6 +4,7 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -29,9 +30,13 @@ var systemdService string
 var systemdSocket string
 
 var userHomeFunc = os.UserHomeDir
+var uidFunc = os.Getuid
 
-var stdin = os.Stdin
+var stdin = io.Reader(os.Stdin)
 
+// InstallLaunchdService installs the kharon launchd service with on-demand activation.
+// Prompts the user for confirmation before installing or overwriting the service file.
+// The service file will be created in the user's home directory under ~/Library/LaunchAgents.
 func InstallLaunchdService() error {
 	home, err := userHomeFunc()
 	if err != nil {
@@ -65,7 +70,7 @@ func InstallLaunchdService() error {
 	if err := os.WriteFile(launchdServiceFilePath, []byte(renderUnit(launchdService, home, binaryPath, "12000", false)), 0644); err != nil {
 		return fmt.Errorf("failed to write launchd service file: %w", err)
 	}
-	launchctlDomain := fmt.Sprintf("gui/%d", os.Getuid())
+	launchctlDomain := fmt.Sprintf("gui/%d", uidFunc())
 
 	slog.Info("Attempting to bootout existing launchd service (if loaded)", "domain", launchctlDomain, "label", launchdServiceLabel)
 	if err := runCommand("launchctl", "bootout", launchctlDomain+"/"+launchdServiceLabel); err != nil {
@@ -82,6 +87,9 @@ func InstallLaunchdService() error {
 	return nil
 }
 
+// InstallSystemdService installs the kharon systemd service and socket with on-demand activation.
+// Prompts the user for confirmation before installing or overwriting the service and socket files.
+// The service and socket files will be created in the user's home directory under ~/.config/systemd/user.
 func InstallSystemdService() error {
 	home, err := userHomeFunc()
 	if err != nil {
@@ -129,16 +137,17 @@ func InstallSystemdService() error {
 	if err := runCommand("systemctl", "--user", "daemon-reload"); err != nil {
 		return fmt.Errorf("failed to reload systemd user daemon: %w", err)
 	}
-	if err := runCommand("systemctl", "--user", "enable", systemdSocketFilePath); err != nil {
+	if err := runCommand("systemctl", "--user", "enable", filepath.Base(systemdSocketFilePath)); err != nil {
 		return fmt.Errorf("failed to enable and start systemd socket: %w", err)
 	}
-	if err := runCommand("systemctl", "--user", "enable", "--now", systemdServiceFilePath); err != nil {
+	if err := runCommand("systemctl", "--user", "enable", "--now", filepath.Base(systemdServiceFilePath)); err != nil {
 		return fmt.Errorf("failed to enable and start systemd service: %w", err)
 	}
 
 	return nil
 }
 
+// ShellCompletionNotice prints a notice about shell completion support and instructions to enable it.
 func ShellCompletionNotice() {
 	fmt.Println(color.GreenString("Kharon supports shell completion."))
 	fmt.Println("To enable shell completion, add the following line to your shell configuration file (e.g., ~/.bashrc or ~/.zshrc):")
