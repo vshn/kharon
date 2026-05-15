@@ -17,6 +17,8 @@ import (
 	"github.com/vshn/kharon/internal/pkg/proxy"
 )
 
+const defaultProxyAddr = "localhost:12000"
+
 var addr, onDemand, proxyMappingFile string
 var onDemandShutdownTimeout time.Duration
 
@@ -24,7 +26,7 @@ func init() {
 	RootCmd.AddCommand(proxyCmd)
 
 	flag := proxyCmd.Flags()
-	flag.StringVar(&addr, "addr", "127.0.0.1:12000", "Address to bind the proxy to in the format <host>:<port>. If port is set to 0, a random free port will be used.")
+	flag.StringVar(&addr, "addr", defaultProxyAddr, "Address to bind the proxy to in the format <host>:<port>. If port is set to 0, a random free port will be used.")
 	flag.StringVar(&onDemand, "on-demand", "", "On-demand allows the proxy to start from launchd or systemd when a connection is attempted. Value can be '-on-demand=launchd=<SocketName>' or '-on-demand=systemd=<my-socket.socket>'. The proxy will shut down after the specified timeout when no active connections are present.")
 	flag.StringVar(&proxyMappingFile, "mapping-file", proxyMappingFilePath(), "Path to the domain to jumphost mapping file. This file can be generated with the `update` subcommand and should be kept up to date. The proxy will watch for SIGHUP to reload the mapping without restarting.")
 	flag.DurationVar(&onDemandShutdownTimeout, "on-demand-shutdown-timeout", 3*time.Minute, "Timeout for shutting down the proxy when no active connections are present in on-demand mode. Zero disables automatic shutdown.")

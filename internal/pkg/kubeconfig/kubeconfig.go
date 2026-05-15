@@ -19,7 +19,7 @@ type Config = model.Config
 // If currentContext is provided, it will be set as the current context in the resulting kubeconfig.
 // The functions does not validate that the provided currentContext actually exists.
 // If not provided, the first cluster with a valid API URL will be set as the current context.
-func FromClusters(clusters []lieutenant.Cluster, currentContext string) *Config {
+func FromClusters(clusters []lieutenant.Cluster, proxyURL, currentContext string) *Config {
 	kc := model.NewConfig()
 	currentContextSet := false
 	if currentContext != "" {
@@ -34,7 +34,8 @@ func FromClusters(clusters []lieutenant.Cluster, currentContext string) *Config 
 		clusterName := c.ID
 		contextName := c.ID
 		kc.Clusters[clusterName] = &model.Cluster{
-			Server: api,
+			Server:   api,
+			ProxyURL: proxyURL,
 		}
 		kc.Contexts[contextName] = &model.Context{
 			Cluster: clusterName,
@@ -80,9 +81,9 @@ func InsertTokenIntoCurrentContext(token string) error {
 
 var urlToContextReplacementRegex = regexp.MustCompile(`[^a-zA-Z0-9:]`)
 
-// InsertConnectionInfoIntoKubeconfig inserts a new cluster, context, and auth info into the kubeconfig for the given context name, API URL, and token.
+// InsertConnectionInfoIntoKubeconfig inserts a new cluster, context, and auth info into the kubeconfig for the given context name, API URL, proxy URL, and token.
 // If contextName is empty, a context name will be generated from the API URL by removing the protocol and replacing non-alphanumeric characters with dashes.
-func InsertConnectionInfoIntoKubeconfig(contextName, apiURL, token string) error {
+func InsertConnectionInfoIntoKubeconfig(contextName, apiURL, proxyURL, token string) error {
 	if contextName == "" {
 		contextName = urlToContextReplacementRegex.ReplaceAllString(strings.TrimPrefix(strings.TrimPrefix(apiURL, "http://"), "https://"), "-")
 	}
@@ -90,7 +91,8 @@ func InsertConnectionInfoIntoKubeconfig(contextName, apiURL, token string) error
 	return updateKubeconfig(func(config *model.Config) error {
 		authInfoName := authInfoName(contextName)
 		config.Clusters[contextName] = &model.Cluster{
-			Server: apiURL,
+			Server:   apiURL,
+			ProxyURL: proxyURL,
 		}
 		config.Contexts[contextName] = &model.Context{
 			Cluster:  contextName,
@@ -102,6 +104,25 @@ func InsertConnectionInfoIntoKubeconfig(contextName, apiURL, token string) error
 		config.CurrentContext = contextName
 		return nil
 	})
+}
+
+// CurrentClusterConfig returns the cluster configuration of the current context in the kubeconfig.
+// It returns an error if the current context is not set or invalid, or if the cluster referenced by the current context is not found.
+func CurrentClusterConfig() (*model.Cluster, error) {
+	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
+	configOverrides := &clientcmd.ConfigOverrides{}
+	c, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, configOverrides).RawConfig()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load kubeconfig: %w", err)
+	}
+	if c.CurrentContext == "" || c.Contexts[c.CurrentContext] == nil {
+		return nil, fmt.Errorf("no current context set in kubeconfig or current context is invalid")
+	}
+	cluster := c.Clusters[c.Contexts[c.CurrentContext].Cluster]
+	if cluster == nil {
+		return nil, fmt.Errorf("cluster referenced by current context not found in kubeconfig")
+	}
+	return cluster, nil
 }
 
 func updateKubeconfig(updateFunc func(*model.Config) error) error {

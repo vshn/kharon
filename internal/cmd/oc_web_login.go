@@ -26,10 +26,11 @@ func init() {
 
 	flag := ocWebLoginCmd.Flags()
 	flag.StringVar(&clustersInventoryFile, "inventory-file", inventoryFilePath(), "Path to the inventory file that should be used by this command.")
+	flag.StringVar(&proxyAddr, "proxy-addr", defaultProxyAddr, "Address of the proxy to use in the generated kubeconfig file.")
 }
 
 const ocWebLoginCmdLongDesc = `Log in to OpenShift clusters with a web-based login.
-Works similarly to 'oc login --web' but can be used without having the 'oc' CLI installed and supports querying authentication URLs from the inventory.
+Works similarly to 'oc login --web' but can be used without having the 'oc' CLI installed, respects the proxy settings from the kubeconfig, and supports querying authentication URLs from the inventory.
 If not arguments are provided, it will attempt to log in to the cluster of the current kubeconfig context.
 If a cluster ID or API server URL is provided, it will attempt to log in to that cluster.
 
@@ -99,30 +100,51 @@ func loginWithClusterID(ctx context.Context, clusterID string) {
 		slog.Error("Cluster not found or does not have a known API URL", "clusterID", clusterID)
 		os.Exit(1)
 	}
+	if err := setProxyEnv(fmt.Sprintf("socks5h://%s", proxyAddr)); err != nil {
+		slog.Error("Failed to set proxy environment variables", slog.Any("error", err))
+		os.Exit(1)
+	}
 	tok, err := requestToken(ctx, apiURL)
 	if err != nil {
 		slog.Error("Failed to request token", slog.Any("error", err))
 		os.Exit(1)
 	}
-	if err := kubeconfig.InsertConnectionInfoIntoKubeconfig(clusterID, apiURL, tok); err != nil {
+	if err := kubeconfig.InsertConnectionInfoIntoKubeconfig(clusterID, apiURL, fmt.Sprintf("socks5://%s", proxyAddr), tok); err != nil {
 		slog.Error("Failed to insert connection info into kubeconfig", slog.Any("error", err))
 		os.Exit(1)
 	}
 }
 
 func loginWithURL(ctx context.Context, apiURL string) {
+	if err := setProxyEnv(fmt.Sprintf("socks5h://%s", proxyAddr)); err != nil {
+		slog.Error("Failed to set proxy environment variables", slog.Any("error", err))
+		os.Exit(1)
+	}
 	tok, err := requestToken(ctx, apiURL)
 	if err != nil {
 		slog.Error("Failed to request token", slog.Any("error", err))
 		os.Exit(1)
 	}
-	if err := kubeconfig.InsertConnectionInfoIntoKubeconfig("", apiURL, tok); err != nil {
+	if err := kubeconfig.InsertConnectionInfoIntoKubeconfig("", apiURL, fmt.Sprintf("socks5://%s", proxyAddr), tok); err != nil {
 		slog.Error("Failed to insert connection info into kubeconfig", slog.Any("error", err))
 		os.Exit(1)
 	}
 }
 
 func loginCurrentContext(ctx context.Context) {
+	kc, err := kubeconfig.CurrentClusterConfig()
+	if err != nil {
+		slog.Error("Failed to get current cluster config", slog.Any("error", err))
+		os.Exit(1)
+	}
+	if kc.ProxyURL != "" {
+		// While the url might have a `socks5://` scheme, Go treats `socks5://` and `socks5h://` the same.
+		if err := setProxyEnv(kc.ProxyURL); err != nil {
+			slog.Error("Failed to set proxy environment variables", slog.Any("error", err))
+			os.Exit(1)
+		}
+	}
+
 	cfg, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(clientcmd.NewDefaultClientConfigLoadingRules(), &clientcmd.ConfigOverrides{}).ClientConfig()
 	if err != nil {
 		slog.Error("Failed to load kubeconfig", slog.Any("error", err))
@@ -171,4 +193,16 @@ func requestToken(ctx context.Context, apiURL string) (string, error) {
 	}, func(url *url.URL) error {
 		return browser.OpenURL(ctx, url.String())
 	}, 0)
+}
+
+func setProxyEnv(proxyURL string) error {
+	// OCP login does not respect the kubeconfig proxy settings, but does support the standard environment variables for proxies, so we set them here if a proxy URL is configured in the kubeconfig.
+	//
+	// https://cs.opensource.google/go/x/net/+/refs/tags/v0.54.0:http/httpproxy/proxy.go;l=90
+	for _, envVar := range []string{"http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY"} {
+		if err := os.Setenv(envVar, proxyURL); err != nil {
+			return fmt.Errorf("failed to set proxy environment variable %s: %w", envVar, err)
+		}
+	}
+	return nil
 }
