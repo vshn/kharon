@@ -53,7 +53,7 @@ func runTest(cmd *cobra.Command, _ []string) {
 		slog.Error("Failed to create routing dialer", "error", err)
 		os.Exit(1)
 	}
-	defer dialer.Close()
+	defer func() { _ = dialer.Close() }()
 
 	clusters, err := cache.ReadInventoryFile(clustersInventoryFile)
 	if err != nil {
@@ -87,10 +87,10 @@ func runTest(cmd *cobra.Command, _ []string) {
 		bold := color.New(color.Bold)
 		fmt.Printf("%s%s\n", bold.Sprint(report.ClusterName), jumphostInfo)
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
-		fmt.Fprintln(w, joinTabbed(errToStatus(report.APIServerConnectionErr), "API Server", report.APIServerURL, errMsg(report.APIServerConnectionErr)))
-		fmt.Fprintln(w, joinTabbed(errToStatus(report.ConsoleConnectionErr), "Console", report.ConsoleURL, errMsg(report.ConsoleConnectionErr)))
-		fmt.Fprintln(w, joinTabbed(errToStatus(report.OAuthConnectionErr), "OAuth", report.OAuthURL, errMsg(report.OAuthConnectionErr)))
-		w.Flush()
+		_, _ = fmt.Fprintln(w, joinTabbed(errToStatus(report.APIServerConnectionErr), "API Server", report.APIServerURL, errMsg(report.APIServerConnectionErr)))
+		_, _ = fmt.Fprintln(w, joinTabbed(errToStatus(report.ConsoleConnectionErr), "Console", report.ConsoleURL, errMsg(report.ConsoleConnectionErr)))
+		_, _ = fmt.Fprintln(w, joinTabbed(errToStatus(report.OAuthConnectionErr), "OAuth", report.OAuthURL, errMsg(report.OAuthConnectionErr)))
+		_ = w.Flush()
 		fmt.Println()
 		if len(report.Warnings) > 0 {
 			for _, warning := range report.Warnings {
