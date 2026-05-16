@@ -316,7 +316,7 @@ func (m *clientMgr) GetClient(ctx context.Context) (*ssh.Client, error) {
 		return nil, fmt.Errorf("error getting jumphost chain for %s: %w", m.Jumphost, err)
 	}
 
-	slog.Info("New connection", slog.String("chain", strings.Join(jumphosts, "->")))
+	slog.Debug("New connection", slog.String("chain", strings.Join(jumphosts, "->")))
 	configs := make([]sshJump, 0, len(jumphosts))
 	for _, jh := range jumphosts {
 		jhAddr, jhConfig, err := configForHost(m.SSHSettings, jh, m.Agent)
@@ -345,7 +345,7 @@ func (m *clientMgr) GetClient(ctx context.Context) (*ssh.Client, error) {
 				select {
 				case <-kat.C:
 					if err := sendKeepAlive(sshc, m.KeepAliveInterval); err != nil {
-						slog.Warn("SSH keepalive failed", slog.String("jumphost", m.Jumphost), slog.Any("error", err))
+						slog.Debug("SSH keepalive failed", slog.String("jumphost", m.Jumphost), slog.Any("error", err))
 						kat.Stop()
 
 						m.clientMux.Lock()
@@ -421,7 +421,7 @@ func (d *RoutingDialer) jumphostForHost(hostname string) string {
 	if jumphost == "" {
 		slog.Debug("Direct connection", slog.String("hostname", hostname))
 	} else {
-		slog.Info("Domain mapped to jumphost", slog.String("hostname", hostname), slog.String("jumphost", jumphost))
+		slog.Debug("Domain mapped to jumphost", slog.String("hostname", hostname), slog.String("jumphost", jumphost))
 	}
 
 	return jumphost
@@ -599,14 +599,14 @@ func configForHost(sshConfig *ssh_config.UserSettings, host string, agent agent.
 		}
 		if _, err := os.Stat(akhf); err != nil {
 			if os.IsNotExist(err) {
-				slog.Warn("UserKnownHostsFile does not exist, skipping", slog.String("path", akhf))
+				slog.Debug("UserKnownHostsFile does not exist, skipping", slog.String("path", akhf))
 				continue
 			}
 			return "", nil, fmt.Errorf("error statting UserKnownHostsFile %s: %w", akhf, err)
 		}
 		akhfs = append(akhfs, akhf)
 	}
-	slog.Info("Using known hosts files for host", slog.String("host", host), slog.String("files", strings.Join(akhfs, ", ")))
+	slog.Debug("Using known hosts files for host", slog.String("host", host), slog.String("files", strings.Join(akhfs, ", ")))
 	knownHosts, err := knownhosts.New(akhfs...)
 	if err != nil {
 		return "", nil, fmt.Errorf("error creating knownhosts callback for host %s: %w", host, err)
