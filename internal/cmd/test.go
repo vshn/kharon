@@ -19,6 +19,20 @@ import (
 	"github.com/vshn/kharon/internal/pkg/proxy"
 )
 
+const testCmdLongDesc = `Test cluster connections to all clusters in the inventory, optionally filtered by a pattern. The pattern can include wildcards, e.g. ` + "`c-prod-*`" + ` to match all clusters starting with ` + "`c-dev-`" + `.
+` + "`--exclude-cluster=c-dev-*`" + ` can be used to exclude clusters matching a pattern.
+
+Works on the inventory downloaded by the 'update' command, so it does not require access to the Lieutenant API.`
+
+const testCmdExample = `# Test all known clusters
+kharon test
+
+# Test clusters starting with c-prod-
+kharon test 'c-prod-*'
+
+# Exclude all patterns ending with -poc? or -dev?
+kharon test --exclude-cluster='*-poc?' --exclude-cluster='*-dev?'`
+
 var testExcludesClusters []string
 
 func init() {
@@ -32,13 +46,19 @@ func init() {
 }
 
 var testCmd = &cobra.Command{
-	Use:   "test",
-	Short: "Test cluster connections.",
-	Long:  "TODO Test cluster connections.",
-	Run:   runTest,
+	Use:     "test [flags] [c-pattern-*] [--exclude-cluster=pattern]",
+	Short:   "Test cluster connections.",
+	Long:    testCmdLongDesc,
+	Example: testCmdExample,
+	Run:     runTest,
+	Args:    cobra.MaximumNArgs(1),
+	ValidArgsFunction: completion.ClusterID(clustersInventoryFile, func(cluster lieutenant.Cluster) bool {
+		api, _, _ := cluster.DynamicStringFact(lieutenant.KnownDynamicFactOpenshiftApiURL)
+		return api != ""
+	}),
 }
 
-func runTest(cmd *cobra.Command, _ []string) {
+func runTest(cmd *cobra.Command, args []string) {
 	if clustersInventoryFile == "" {
 		slog.Error("Inventory file path is required", "error", "inventory-file flag is empty and failed to determine default path.")
 		os.Exit(1)
@@ -46,6 +66,11 @@ func runTest(cmd *cobra.Command, _ []string) {
 	if proxyMappingFile == "" {
 		slog.Error("Mapping file path is required", "error", "mapping-file flag is empty and failed to determine default path.")
 		os.Exit(1)
+	}
+
+	includePattern := ""
+	if len(args) > 0 {
+		includePattern = args[0]
 	}
 
 	dialer, err := proxy.NewRoutingDialer(nil, net.Dialer{}, 0, proxyMappingFile)
@@ -59,6 +84,15 @@ func runTest(cmd *cobra.Command, _ []string) {
 	if err != nil {
 		slog.Error("Failed to read inventory file. You might need to run the `update` command first.", "error", err)
 		os.Exit(1)
+	}
+	if includePattern != "" {
+		filtered := make([]lieutenant.Cluster, 0, len(clusters))
+		for _, cluster := range clusters {
+			if wildcard.Match(includePattern, cluster.ID) {
+				filtered = append(filtered, cluster)
+			}
+		}
+		clusters = filtered
 	}
 	if len(testExcludesClusters) > 0 {
 		filtered := make([]lieutenant.Cluster, 0, len(clusters))
@@ -101,7 +135,12 @@ func runTest(cmd *cobra.Command, _ []string) {
 	}
 	if hasErrors {
 		fmt.Println(color.RedString("Some connections could not be established. Please check the error messages above."))
-		fmt.Printf("Run %s and check the %s https://vshnwiki.atlassian.net/wiki/x/I4GbLQ.\n", color.CyanString("kharon update; sshop_update"), color.YellowString("known weird jumphosts"))
+		fmt.Println()
+		fmt.Printf("Run %s and check the %s.\n", color.CyanString("kharon update; sshop_update"), color.YellowString("known weird jumphosts https://vshnwiki.atlassian.net/wiki/x/I4GbLQ"))
+		fmt.Println()
+		fmt.Printf("Check if you can reach the jumphost non-interactively using %s and the %s shown in the output above.\n", color.CyanString("ssh -o BatchMode=yes JUMPHOST -- hostname"), color.MagentaString("jumphost"))
+		fmt.Printf("If the failing jumphost is listed as a known weird jumphost, you might need to update the SSH configuration, upload your public key, or add the trust the host key.\n")
+		fmt.Println()
 		fmt.Printf("You can exclude clusters using the %s flag.\n", color.CyanString("--exclude-cluster=<pattern>"))
 		os.Exit(7)
 	}
