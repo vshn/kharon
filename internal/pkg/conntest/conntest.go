@@ -19,6 +19,10 @@ type Report struct {
 	OAuthConnectionErr     error
 }
 
+func (r Report) HasErrors() bool {
+	return r.ConsoleConnectionErr != nil || r.APIServerConnectionErr != nil || r.OAuthConnectionErr != nil
+}
+
 // TestClusters tests the connectivity to the API server, console and OAuth endpoint of the given clusters using the provided HTTP client.
 // It returns a channel of reports for each cluster.
 func TestClusters(client *http.Client, clusters []lieutenant.Cluster) iter.Seq[Report] {
