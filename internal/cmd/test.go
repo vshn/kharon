@@ -4,12 +4,11 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
-	"net/http"
 	"os"
 	"strings"
 	"text/tabwriter"
-	"time"
 
+	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 
 	"github.com/vshn/kharon/internal/pkg/cache"
@@ -48,12 +47,6 @@ func runTest(cmd *cobra.Command, _ []string) {
 		os.Exit(1)
 	}
 	defer dialer.Close()
-	httpClient := &http.Client{
-		Transport: &http.Transport{
-			DialContext: dialer.DialContext,
-		},
-		Timeout: 5 * time.Second,
-	}
 
 	clusters, err := cache.ReadInventoryFile(clustersInventoryFile)
 	if err != nil {
@@ -62,17 +55,30 @@ func runTest(cmd *cobra.Command, _ []string) {
 	}
 
 	var hasErrors bool
-	for report := range conntest.TestClusters(httpClient, clusters) {
+	for report := range conntest.TestClusters(dialer, clusters) {
 		hasErrors = hasErrors || report.HasErrors()
-		fmt.Printf("Cluster: %s\n", report.ClusterName)
+		var jumphostInfo string
+		if report.Jumphost != "" {
+			jumphostInfo = color.MagentaString(fmt.Sprintf(" (%s)", report.Jumphost))
+		}
+		bold := color.New(color.Bold)
+		fmt.Printf("%s%s\n", bold.Sprint(report.ClusterName), jumphostInfo)
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 		fmt.Fprintln(w, joinTabbed(errToStatus(report.APIServerConnectionErr), "API Server", report.APIServerURL, errMsg(report.APIServerConnectionErr)))
 		fmt.Fprintln(w, joinTabbed(errToStatus(report.ConsoleConnectionErr), "Console", report.ConsoleURL, errMsg(report.ConsoleConnectionErr)))
 		fmt.Fprintln(w, joinTabbed(errToStatus(report.OAuthConnectionErr), "OAuth", report.OAuthURL, errMsg(report.OAuthConnectionErr)))
 		w.Flush()
 		fmt.Println()
+		if len(report.Warnings) > 0 {
+			for _, warning := range report.Warnings {
+				fmt.Printf("⚠️  %s\n", color.YellowString(warning))
+			}
+			fmt.Println()
+		}
 	}
 	if hasErrors {
+		fmt.Println(color.RedString("Some connections could not be established. Please check the error messages above."))
+		fmt.Printf("Run %s and check the known weird jumphosts https://vshnwiki.atlassian.net/wiki/x/I4GbLQ.\n", color.CyanString("kharon update; sshop_update"))
 		os.Exit(7)
 	}
 }

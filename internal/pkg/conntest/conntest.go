@@ -4,12 +4,17 @@ import (
 	"io"
 	"iter"
 	"net/http"
+	"net/url"
+	"time"
 
 	"github.com/vshn/kharon/internal/pkg/lieutenant"
+	"github.com/vshn/kharon/internal/pkg/proxy"
 )
 
 type Report struct {
 	ClusterName string
+
+	Jumphost string
 
 	ConsoleURL             string
 	ConsoleConnectionErr   error
@@ -17,6 +22,8 @@ type Report struct {
 	APIServerConnectionErr error
 	OAuthURL               string
 	OAuthConnectionErr     error
+
+	Warnings []string
 }
 
 func (r Report) HasErrors() bool {
@@ -25,7 +32,15 @@ func (r Report) HasErrors() bool {
 
 // TestClusters tests the connectivity to the API server, console and OAuth endpoint of the given clusters using the provided HTTP client.
 // It returns a channel of reports for each cluster.
-func TestClusters(client *http.Client, clusters []lieutenant.Cluster) iter.Seq[Report] {
+func TestClusters(r *proxy.RoutingDialer, clusters []lieutenant.Cluster) iter.Seq[Report] {
+	t := http.DefaultTransport.(*http.Transport).Clone()
+	t.Proxy = nil
+	t.DialContext = r.DialContext
+
+	client := &http.Client{
+		Transport: t,
+		Timeout:   5 * time.Second,
+	}
 	return func(yield func(Report) bool) {
 		for _, cluster := range clusters {
 			var report Report
@@ -33,6 +48,12 @@ func TestClusters(client *http.Client, clusters []lieutenant.Cluster) iter.Seq[R
 			if apiURL, _, _ := cluster.DynamicStringFact(lieutenant.KnownDynamicFactOpenshiftApiURL); apiURL != "" {
 				report.APIServerURL = apiURL
 				report.APIServerConnectionErr = get(client, apiURL)
+				u, err := url.Parse(apiURL)
+				if err == nil {
+					report.Jumphost = r.JumphostForHost(u.Hostname())
+				} else {
+					report.Warnings = append(report.Warnings, "Failed to parse API server URL to extract jumphost: "+err.Error())
+				}
 			} else {
 				// If there's no API URL there's no point in testing the cluster further
 				continue

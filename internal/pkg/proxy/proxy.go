@@ -404,7 +404,9 @@ func sendKeepAlive(sshc *ssh.Client, timeout time.Duration) error {
 	}
 }
 
-func (d *RoutingDialer) jumphostForHost(hostname string) string {
+// JumphostForHost determines the appropriate jumphost for the given hostname based
+// on the loaded hostname mappings and caches the result for future lookups.
+func (d *RoutingDialer) JumphostForHost(hostname string) string {
 	if jh, ok := d.routes.Load(hostname); ok {
 		return jh.(string)
 	}
@@ -435,7 +437,7 @@ func (d *RoutingDialer) DialContext(ctx context.Context, network, addr string) (
 		return nil, fmt.Errorf("error splitting host and port for %s: %w", addr, err)
 	}
 
-	jumphost := d.jumphostForHost(hostname)
+	jumphost := d.JumphostForHost(hostname)
 
 	if jumphost == "" {
 		return d.directDialer.DialContext(ctx, network, addr)
