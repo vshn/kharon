@@ -19,7 +19,8 @@ import (
 	"github.com/vshn/kharon/internal/pkg/proxy"
 )
 
-const testCmdLongDesc = `Test cluster connections to all clusters in the inventory, optionally filtered by a pattern. The pattern can include wildcards, e.g. ` + "`c-prod-*`" + ` to match all clusters starting with ` + "`c-dev-`" + `.
+const testCmdLongDesc = `Test cluster connections to all clusters in the inventory, optionally filtered by a pattern.
+The pattern can include wildcards, e.g. ` + "`c-prod-*`" + ` to match all clusters starting with ` + "`c-dev-`" + `.
 ` + "`--exclude-cluster=c-dev-*`" + ` can be used to exclude clusters matching a pattern.
 
 Works on the inventory downloaded by the 'update' command, so it does not require access to the Lieutenant API.`
