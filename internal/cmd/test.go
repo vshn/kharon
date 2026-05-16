@@ -112,14 +112,19 @@ func runTest(cmd *cobra.Command, args []string) {
 		clusters = filtered
 	}
 
+	bold := color.New(color.Bold)
+
 	var hasErrors bool
 	for report := range conntest.TestClusters(dialer, clusters) {
+		if report.Skipped() {
+			fmt.Printf("%s\nSKIPPED  %s\n\n", bold.Sprint(report.ClusterName), report.SkippedReason)
+			continue
+		}
 		hasErrors = hasErrors || report.HasErrors()
 		var jumphostInfo string
 		if report.Jumphost != "" {
 			jumphostInfo = color.MagentaString(fmt.Sprintf(" (%s)", report.Jumphost))
 		}
-		bold := color.New(color.Bold)
 		fmt.Printf("%s%s\n", bold.Sprint(report.ClusterName), jumphostInfo)
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 		_, _ = fmt.Fprintln(w, joinTabbed(errToStatus(report.APIServerConnectionErr), "API Server", report.APIServerURL, errMsg(report.APIServerConnectionErr)))

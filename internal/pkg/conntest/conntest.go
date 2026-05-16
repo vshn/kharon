@@ -15,6 +15,8 @@ import (
 type Report struct {
 	ClusterName string
 
+	SkippedReason string
+
 	Jumphost string
 
 	ConsoleURL             string
@@ -27,13 +29,17 @@ type Report struct {
 	Warnings []string
 }
 
+func (r Report) HasErrors() bool {
+	return r.ConsoleConnectionErr != nil || r.APIServerConnectionErr != nil || r.OAuthConnectionErr != nil
+}
+
+func (r Report) Skipped() bool {
+	return r.SkippedReason != ""
+}
+
 type RoutingDialer interface {
 	DialContext(ctx context.Context, network, address string) (net.Conn, error)
 	JumphostForHost(host string) string
-}
-
-func (r Report) HasErrors() bool {
-	return r.ConsoleConnectionErr != nil || r.APIServerConnectionErr != nil || r.OAuthConnectionErr != nil
 }
 
 // TestClusters tests the connectivity to the API server, console and OAuth endpoint of the given clusters using the provided HTTP client.
@@ -61,7 +67,10 @@ func TestClusters(r RoutingDialer, clusters []lieutenant.Cluster) iter.Seq[Repor
 					report.Warnings = append(report.Warnings, "Failed to parse API server URL to extract jumphost: "+err.Error())
 				}
 			} else {
-				// If there's no API URL there's no point in testing the cluster further
+				report.SkippedReason = "No API server URL found in inventory"
+				if !yield(report) {
+					return
+				}
 				continue
 			}
 			if consoleURL, _, _ := cluster.DynamicStringFact(lieutenant.KnownDynamicFactOpenshiftConsoleURL); consoleURL != "" {

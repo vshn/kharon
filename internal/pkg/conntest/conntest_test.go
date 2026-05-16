@@ -32,7 +32,9 @@ func Test_TestClusters(t *testing.T) {
 	}
 
 	reports := slices.Collect(conntest.TestClusters(dialer, []lieutenant.Cluster{
-		{},
+		{
+			ID: "no-api-url",
+		},
 		{
 			ID: "invalid",
 			DynamicFacts: map[string]any{
@@ -56,6 +58,10 @@ func Test_TestClusters(t *testing.T) {
 	}))
 
 	assert.Equal(t, []conntest.Report{
+		{
+			ClusterName:   "no-api-url",
+			SkippedReason: "No API server URL found in inventory",
+		},
 		{
 			ClusterName:  "invalid",
 			APIServerURL: "http://foo.com/?foo\nbar",
@@ -106,6 +112,15 @@ func Test_Report_HasErrors(t *testing.T) {
 		ConsoleConnectionErr:   nil,
 		OAuthConnectionErr:     nil,
 	}.HasErrors())
+}
+
+func Test_Report_Skipped(t *testing.T) {
+	assert.True(t, conntest.Report{
+		SkippedReason: "reason",
+	}.Skipped())
+	assert.False(t, conntest.Report{
+		SkippedReason: "",
+	}.Skipped())
 }
 
 type mockDialer struct {
