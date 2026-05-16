@@ -1,14 +1,15 @@
 package conntest
 
 import (
+	"context"
 	"io"
 	"iter"
+	"net"
 	"net/http"
 	"net/url"
 	"time"
 
 	"github.com/vshn/kharon/internal/pkg/lieutenant"
-	"github.com/vshn/kharon/internal/pkg/proxy"
 )
 
 type Report struct {
@@ -26,13 +27,18 @@ type Report struct {
 	Warnings []string
 }
 
+type RoutingDialer interface {
+	DialContext(ctx context.Context, network, address string) (net.Conn, error)
+	JumphostForHost(host string) string
+}
+
 func (r Report) HasErrors() bool {
 	return r.ConsoleConnectionErr != nil || r.APIServerConnectionErr != nil || r.OAuthConnectionErr != nil
 }
 
 // TestClusters tests the connectivity to the API server, console and OAuth endpoint of the given clusters using the provided HTTP client.
 // It returns a channel of reports for each cluster.
-func TestClusters(r *proxy.RoutingDialer, clusters []lieutenant.Cluster) iter.Seq[Report] {
+func TestClusters(r RoutingDialer, clusters []lieutenant.Cluster) iter.Seq[Report] {
 	t := http.DefaultTransport.(*http.Transport).Clone()
 	t.Proxy = nil
 	t.DialContext = r.DialContext
