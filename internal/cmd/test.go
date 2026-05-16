@@ -9,12 +9,17 @@ import (
 	"text/tabwriter"
 
 	"github.com/fatih/color"
+	"github.com/minio/pkg/v3/wildcard"
 	"github.com/spf13/cobra"
 
 	"github.com/vshn/kharon/internal/pkg/cache"
+	"github.com/vshn/kharon/internal/pkg/completion"
 	"github.com/vshn/kharon/internal/pkg/conntest"
+	"github.com/vshn/kharon/internal/pkg/lieutenant"
 	"github.com/vshn/kharon/internal/pkg/proxy"
 )
+
+var testExcludesClusters []string
 
 func init() {
 	RootCmd.AddCommand(testCmd)
@@ -22,6 +27,8 @@ func init() {
 	flag := testCmd.Flags()
 	flag.StringVar(&clustersInventoryFile, "inventory-file", inventoryFilePath(), "Path to the inventory file that should be used by this command.")
 	flag.StringVar(&proxyMappingFile, "mapping-file", proxyMappingFilePath(), "Path to the domain to jumphost mapping file. This file can be generated with the `update` subcommand.")
+	flag.StringArrayVar(&testExcludesClusters, "exclude-cluster", []string{}, "Exclude clusters matching the pattern (supports wildcards, e.g. `--exclude-cluster=c-dev-*` to exclude all clusters starting with `c-dev-`).")
+	testCmd.RegisterFlagCompletionFunc("exclude-cluster", completion.ClusterID(clustersInventoryFile, nil))
 }
 
 var testCmd = &cobra.Command{
@@ -53,6 +60,22 @@ func runTest(cmd *cobra.Command, _ []string) {
 		slog.Error("Failed to read inventory file. You might need to run the `update` command first.", "error", err)
 		os.Exit(1)
 	}
+	if len(testExcludesClusters) > 0 {
+		filtered := make([]lieutenant.Cluster, 0, len(clusters))
+		for _, cluster := range clusters {
+			exclude := false
+			for _, pattern := range testExcludesClusters {
+				if wildcard.Match(pattern, cluster.ID) {
+					exclude = true
+					break
+				}
+			}
+			if !exclude {
+				filtered = append(filtered, cluster)
+			}
+		}
+		clusters = filtered
+	}
 
 	var hasErrors bool
 	for report := range conntest.TestClusters(dialer, clusters) {
@@ -78,7 +101,8 @@ func runTest(cmd *cobra.Command, _ []string) {
 	}
 	if hasErrors {
 		fmt.Println(color.RedString("Some connections could not be established. Please check the error messages above."))
-		fmt.Printf("Run %s and check the known weird jumphosts https://vshnwiki.atlassian.net/wiki/x/I4GbLQ.\n", color.CyanString("kharon update; sshop_update"))
+		fmt.Printf("Run %s and check the %s https://vshnwiki.atlassian.net/wiki/x/I4GbLQ.\n", color.CyanString("kharon update; sshop_update"), color.YellowString("known weird jumphosts"))
+		fmt.Printf("You can exclude clusters using the %s flag.\n", color.CyanString("--exclude-cluster=<pattern>"))
 		os.Exit(7)
 	}
 }
