@@ -42,7 +42,7 @@ func init() {
 	flag.StringVar(&clustersInventoryFile, "inventory-file", inventoryFilePath(), "Path to the inventory file that should be used by this command.")
 	flag.StringVar(&proxyMappingFile, "mapping-file", proxyMappingFilePath(), "Path to the domain to jumphost mapping file. This file can be generated with the `update` subcommand.")
 	flag.StringArrayVar(&testExcludesClusters, "exclude-cluster", []string{}, "Exclude clusters matching the pattern (supports wildcards, e.g. `--exclude-cluster=c-dev-*` to exclude all clusters starting with `c-dev-`).")
-	testCmd.RegisterFlagCompletionFunc("exclude-cluster", completion.ClusterID(clustersInventoryFile, nil))
+	must(testCmd.RegisterFlagCompletionFunc("exclude-cluster", completion.ClusterID(clustersInventoryFile, nil)))
 }
 
 var testCmd = &cobra.Command{
@@ -162,4 +162,10 @@ func errMsg(err error) string {
 		return ""
 	}
 	return err.Error()
+}
+
+func must(err error) {
+	if err != nil {
+		panic(err)
+	}
 }
