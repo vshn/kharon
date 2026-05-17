@@ -293,6 +293,7 @@ func Test_Start(t *testing.T) {
 			"three.hops":   "jumphost3",
 			"after.reload": "jumphost4",
 		},
+		DirectAccessDomains: []string{"sub.always.direct", "sub.sub.always.direct"},
 	}), "failed to update hostname mapping")
 
 	require.NoError(t, p.Reload(mappingPath), "failed to reload proxy with updated SSH config and hostname mapping")
@@ -300,6 +301,36 @@ func Test_Start(t *testing.T) {
 	ev.requireEventuallyWithT(t, func(t *assert.CollectT) {
 		httpClient.RequireSuccessfulGet(t, "http://after.reload")
 	}, "expected to be able to connect to after.reload after reloading SSH config with new jumphost")
+
+	proxyRes, err := http.Get(fmt.Sprintf("http://%s/proxy.pac", proxyAddr))
+	require.NoError(t, err, "failed to fetch proxy PAC file")
+	defer proxyRes.Body.Close()
+	proxyPAC, err := io.ReadAll(proxyRes.Body)
+	require.NoError(t, err, "failed to read proxy PAC response body")
+	require.Equal(t, strings.ReplaceAll(`function FindProxyForURL(url, host) {
+  if (shExpMatch(host, "*.vshn.net")) {
+    return "DIRECT";
+  }
+  if (shExpMatch(host, "*sub.always.direct")) {
+    return "DIRECT";
+  }
+  if (shExpMatch(host, "*sub.sub.always.direct")) {
+    return "DIRECT";
+  }
+  if (shExpMatch(host, "*after.reload")) {
+    return "SOCKS5 {{ADDR}}";
+  }
+  if (shExpMatch(host, "*three.hops")) {
+    return "SOCKS5 {{ADDR}}";
+  }
+  if (shExpMatch(host, "*two.hops")) {
+    return "SOCKS5 {{ADDR}}";
+  }
+  if (shExpMatch(host, "*one.hop")) {
+    return "SOCKS5 {{ADDR}}";
+  }
+  return "DIRECT";
+}`, "{{ADDR}}", proxyAddr), string(proxyPAC))
 
 	cancel()
 	require.NoError(t, wg.Wait())
