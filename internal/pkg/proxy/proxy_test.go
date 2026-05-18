@@ -715,7 +715,7 @@ func spawnSSHAgent(t *testing.T) (pub ed25519.PublicKey, socketPath string) {
 
 type nopLogger struct{}
 
-func (l *nopLogger) Printf(format string, args ...interface{}) {}
+func (l *nopLogger) Printf(format string, args ...any) {}
 
 type sshConfigBuilder []sshConfigBlock
 
