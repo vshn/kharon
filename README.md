@@ -46,7 +46,7 @@ Install the proxy with the interactive installer:
 kharon install
 ```
 
-Point your browser to `socks5h://localhost:12000` or get a shell with environment and kube configs set up:
+[Point your browser](./docs/setup) to `socks5h://localhost:12000` or get a shell with environment and kube configs set up:
 
 ```sh
 kharon shell
