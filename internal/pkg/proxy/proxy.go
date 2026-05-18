@@ -2,10 +2,13 @@ package proxy
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
@@ -20,6 +23,7 @@ import (
 	"golang.org/x/crypto/ssh/agent"
 	"golang.org/x/crypto/ssh/knownhosts"
 	"golang.org/x/sync/errgroup"
+	"tailscale.com/net/proxymux"
 	"tailscale.com/net/socks5"
 
 	"github.com/vshn/kharon/internal/pkg/cache"
@@ -47,6 +51,9 @@ type Proxy struct {
 
 	// dialer is the current dialer to use for incoming connections. It is stored atomically so that it can be replaced on the fly when reloading the configuration.
 	dialer atomic.Pointer[RoutingDialer]
+
+	// addr is the current address the proxy is listening on, used for generating the PAC file.
+	addr string
 }
 
 func (p *Proxy) Start(ctx context.Context, lp func() (net.Listener, error), mappingFile string) (err error) {
@@ -77,8 +84,23 @@ func (p *Proxy) Start(ctx context.Context, lp func() (net.Listener, error), mapp
 	if err != nil {
 		return fmt.Errorf("failed to get listener: %w", err)
 	}
-	slog.Info("starting SOCKS5 server", slog.String("addr", listener.Addr().String()))
+	p.addr = listener.Addr().String()
+	slog.Info("starting SOCKS5 server", slog.String("addr", p.addr))
 	listener = &ConnCountingListener{Listener: listener}
+
+	socksListener, httpListener := proxymux.SplitSOCKSAndHTTP(listener)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /proxy.pac", func(w http.ResponseWriter, r *http.Request) {
+		slog.Debug("Request", slog.String("method", r.Method), slog.String("url", r.URL.String()), slog.String("remote_addr", r.RemoteAddr))
+		w.Header().Set("Content-Type", "application/x-ns-proxy-autoconfig")
+		if err := p.dialer.Load().writeProxyPAC(w, p.addr); err != nil {
+			slog.Error("failed to write proxy PAC", slog.Any("error", err))
+		}
+	})
+	httpServ := &http.Server{
+		Handler: mux,
+	}
 
 	eg, egCtx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
@@ -87,8 +109,19 @@ func (p *Proxy) Start(ctx context.Context, lp func() (net.Listener, error), mapp
 		return listener.Close()
 	})
 	eg.Go(func() error {
-		if err := socks5Server.Serve(listener); err != nil && !errors.Is(err, net.ErrClosed) {
+		if err := socks5Server.Serve(socksListener); err != nil && !errors.Is(err, net.ErrClosed) {
 			return fmt.Errorf("SOCKS5 server error: %w", err)
+		}
+		return nil
+	})
+	eg.Go(func() error {
+		defer func() {
+			if err := httpServ.Close(); err != nil {
+				slog.Error("HTTP server close error", slog.Any("error", err))
+			}
+		}()
+		if err := httpServ.Serve(httpListener); err != nil && !errors.Is(err, net.ErrClosed) {
+			return fmt.Errorf("HTTP server error: %w", err)
 		}
 		return nil
 	})
@@ -730,4 +763,35 @@ func replaceTildeWithHome(path string) (string, error) {
 		return filepath.Join(home, path[2:]), nil
 	}
 	return path, nil
+}
+
+func (d *RoutingDialer) writeProxyPAC(w io.Writer, addr string) error {
+	// Allow direct access to the vshn.net sign-in page and the Lieutenant API
+	// Fallback in case the proxy is not available due to incompatible or corrupted jumphost
+	// mapping rules.
+	staticDirectDomains := []hostSuffixJumphostMapping{
+		{HostSuffix: ".vshn.net"},
+	}
+
+	if _, err := fmt.Fprint(w, "function FindProxyForURL(url, host) {\n"); err != nil {
+		return err
+	}
+	for _, mapping := range append(staticDirectDomains, d.hostnameMapping...) {
+		// Turns out JSON is a subset of JavaScript...
+		s, err := json.Marshal(fmt.Sprintf("*%s", mapping.HostSuffix))
+		if err != nil {
+			return fmt.Errorf("error marshalling host suffix to JSON: %w", err)
+		}
+		ret := "DIRECT"
+		if mapping.Jumphost != "" {
+			ret = fmt.Sprintf("SOCKS5 %s", addr)
+		}
+		if _, err := fmt.Fprintf(w, "  if (shExpMatch(host, %s)) {\n    return \"%s\";\n  }\n", s, ret); err != nil {
+			return err
+		}
+	}
+	if _, err := fmt.Fprint(w, "  return \"DIRECT\";\n}"); err != nil {
+		return err
+	}
+	return nil
 }
