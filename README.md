@@ -21,22 +21,39 @@ Currently the tool relies on a SSH agent running. Either the `SSH_AUTH_SOCK` env
 
 Setup [SSH Jumphost (sshop)](https://vshnwiki.atlassian.net/wiki/spaces/VT/pages/8291275/SSH+Jumphost+sshop).
 
-Pull jumphost configuration and cluster inventory from Lieutenant:
+Install `kharon` in your `PATH` by either downloading the [latest release](https://github.com/vshn/kharon/releases/latest) or building from source:
 
 ```sh
-go run . update
+make build
+mv kharon ~/.local/bin
+# Ensure kharon can be executed from your PATH
+kharon help
 ```
 
-Start the proxy:
+Pull the latest cluster and jumphost information from the API:
 
 ```sh
-go run . proxy
+kharon update
+```
+
+Install the proxy with the interactive installer:
+
+```sh
+# This will install a systemd/launchd unit interactively.
+# The proxy will be set up in "on-demand" mode, which means it will only start when
+# a connection is made to the proxy port and will stop after a period of inactivity.
+# Don't forget to setup auto-complete for your shell of choice, the installer will remind you to do so!
+kharon install
 ```
 
 Point your browser to `socks5h://localhost:12000` or get a shell with environment and kube configs set up:
 
 ```sh
-go run . shell
+kharon shell
 ```
 
-There are sample `systemd`/`launchd` unit files in the `os/` directory.
+or login to your cluster of choice directly (the APPUiO lab cluster is a good candidate for testing):
+
+```sh
+kharon oc-web-login c-appuio-lab-cloudscale-rma-0
+```
