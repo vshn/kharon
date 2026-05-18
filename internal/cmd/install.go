@@ -1,12 +1,15 @@
 package cmd
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
 	"runtime"
 
+	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 
+	"github.com/vshn/kharon/internal/pkg/cache"
 	"github.com/vshn/kharon/internal/pkg/install"
 )
 
@@ -21,6 +24,9 @@ kharon install`
 
 func init() {
 	RootCmd.AddCommand(installCmd)
+
+	flag := installCmd.Flags()
+	flag.StringVar(&proxyMappingFile, "mapping-file", proxyMappingFilePath(), "Path to the domain to jumphost mapping file. This file can be generated with the `update` subcommand. The installer tests if the file can be read and parsed correctly before proceeding.")
 }
 
 var installCmd = &cobra.Command{
@@ -33,6 +39,12 @@ var installCmd = &cobra.Command{
 }
 
 func runInstall(cmd *cobra.Command, args []string) {
+	if _, err := cache.ReadProxyMappingFile(proxyMappingFile); err != nil {
+		fmt.Printf("Failed to read the proxy mapping file %s.\n", color.MagentaString(proxyMappingFile))
+		fmt.Printf("Please run %s before continuing.\n", color.CyanString("kharon update"))
+		os.Exit(1)
+	}
+
 	switch runtime.GOOS {
 	case "linux":
 		if err := install.InstallSystemdService(); err != nil {

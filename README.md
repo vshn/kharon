@@ -30,6 +30,12 @@ mv kharon ~/.local/bin
 kharon help
 ```
 
+Pull the latest cluster and jumphost information from the API:
+
+```sh
+kharon update
+```
+
 Install the proxy with the interactive installer:
 
 ```sh
@@ -38,12 +44,6 @@ Install the proxy with the interactive installer:
 # a connection is made to the proxy port and will stop after a period of inactivity.
 # Don't forget to setup auto-complete for your shell of choice, the installer will remind you to do so!
 kharon install
-```
-
-Pull the latest cluster and jumphost information from the API:
-
-```sh
-kharon update
 ```
 
 Point your browser to `socks5h://localhost:12000` or get a shell with environment and kube configs set up:
