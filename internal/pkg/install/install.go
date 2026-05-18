@@ -156,6 +156,13 @@ func ShellCompletionNotice() {
 	fmt.Println(color.CyanString("kharon completion fish | source   # for fish"))
 }
 
+// BrowserSetupNotice prints a notice about browser setup to use the proxy.
+func BrowserSetupNotice() {
+	fmt.Println()
+	fmt.Println(color.GreenString("Don't forget to setup your browser to use the proxy!"))
+	fmt.Printf("Check %s for instructions.\n", color.CyanString("https://github.com/vshn/kharon/tree/main/docs/setup"))
+}
+
 func forceOverwriteFile(path, content string) error {
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("failed to remove existing file: %w", err)

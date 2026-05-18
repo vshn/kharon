@@ -61,4 +61,5 @@ func runInstall(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 	install.ShellCompletionNotice()
+	install.BrowserSetupNotice()
 }
