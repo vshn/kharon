@@ -67,7 +67,7 @@ func InstallLaunchdService() error {
 	if err := os.MkdirAll(filepath.Dir(launchdServiceFilePath), 0755); err != nil {
 		return fmt.Errorf("failed to create directory for launchd service file: %w", err)
 	}
-	if err := os.WriteFile(launchdServiceFilePath, []byte(renderUnit(launchdService, home, binaryPath, "12000", false)), 0644); err != nil {
+	if err := forceOverwriteFile(launchdServiceFilePath, renderUnit(launchdService, home, binaryPath, "12000", false)); err != nil {
 		return fmt.Errorf("failed to write launchd service file: %w", err)
 	}
 	launchctlDomain := fmt.Sprintf("gui/%d", uidFunc())
@@ -128,7 +128,7 @@ func InstallSystemdService() error {
 		if err := os.MkdirAll(filepath.Dir(unit.path), 0755); err != nil {
 			return fmt.Errorf("failed to create directory for systemd unit file: %w", err)
 		}
-		if err := os.WriteFile(unit.path, []byte(renderUnit(unit.content, home, binaryPath, "12000", false)), 0644); err != nil {
+		if err := forceOverwriteFile(unit.path, renderUnit(unit.content, home, binaryPath, "12000", false)); err != nil {
 			return fmt.Errorf("failed to write systemd unit file: %w", err)
 		}
 	}
@@ -154,6 +154,16 @@ func ShellCompletionNotice() {
 	fmt.Println(color.CyanString("source <(kharon completion bash)  # for bash"))
 	fmt.Println(color.CyanString("source <(kharon completion zsh)   # for zsh"))
 	fmt.Println(color.CyanString("kharon completion fish | source   # for fish"))
+}
+
+func forceOverwriteFile(path, content string) error {
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to remove existing file: %w", err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		return fmt.Errorf("failed to write file: %w", err)
+	}
+	return nil
 }
 
 func runCommand(name string, args ...string) error {
