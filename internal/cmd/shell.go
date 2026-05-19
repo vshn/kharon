@@ -23,7 +23,7 @@ If no argument is provided, the context is set to the first found cluster with a
 
 The shell is started as a login shell by default, this can be disabled with the --login flag.
 Additional shell arguments can be provided after the cluster ID or after a '--' separator.
-If additional arguments are provided the login flag is ignored.
+If additional arguments are provided the shell is not started as a login shell, even if the --login flag is set.
 If the --command flag is used, the provided command is run instead of the default shell, and the --login flag is ignored.
 See examples below for details.
 
