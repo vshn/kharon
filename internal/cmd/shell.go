@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
+	"slices"
 
 	"github.com/spf13/cobra"
 
@@ -56,15 +57,12 @@ type shellCmdFlags struct {
 func newShellCmd() *cobra.Command {
 	flags := &shellCmdFlags{}
 	cmd := &cobra.Command{
-		Use:     "shell [c-cluster-id]",
-		Short:   "Run a shell with a kubeconfig generated from the inventory, set up to use the proxy.",
-		Long:    shellCmdLongDesc,
-		Example: shellCmdExample,
-		RunE:    func(cmd *cobra.Command, args []string) error { return runShell(cmd, flags, args) },
-		ValidArgsFunction: completion.ClusterID(clustersInventoryFile, func(cluster lieutenant.Cluster) bool {
-			api, _, _ := cluster.DynamicStringFact(lieutenant.KnownDynamicFactOpenshiftApiURL)
-			return api != ""
-		}),
+		Use:               "shell [c-cluster-id]",
+		Short:             "Run a shell with a kubeconfig generated from the inventory, set up to use the proxy.",
+		Long:              shellCmdLongDesc,
+		Example:           shellCmdExample,
+		RunE:              func(cmd *cobra.Command, args []string) error { return runShell(cmd, flags, args) },
+		ValidArgsFunction: shellCmdArgsValidator,
 	}
 	flag := cmd.Flags()
 	flag.StringVar(&flags.InventoryFile, "inventory-file", inventoryFilePath(), "Path to the inventory file that should be used by this command.")
@@ -73,6 +71,19 @@ func newShellCmd() *cobra.Command {
 	flag.BoolVar(&flags.Command, "command", false, "Run the command at the first argument after cluster ID instead of the default shell.")
 
 	return cmd
+}
+
+func shellCmdArgsValidator(cmd *cobra.Command, args []string, cur string) ([]string, cobra.ShellCompDirective) {
+	// Stop cluster completion after the first argument or the first '--' separator.
+	// [cobra.Command.ArgsLenAtDash] is not yet initialized when this function is called for completion,
+	// so we check for the presence of '--' in os.Args instead.
+	if len(args) == 0 && !slices.Contains(os.Args, "--") {
+		return completion.ClusterID(clustersInventoryFile, func(cluster lieutenant.Cluster) bool {
+			api, _, _ := cluster.DynamicStringFact(lieutenant.KnownDynamicFactOpenshiftApiURL)
+			return api != ""
+		})(cmd, args, cur)
+	}
+	return nil, cobra.ShellCompDirectiveDefault
 }
 
 func runShell(cmd *cobra.Command, flags *shellCmdFlags, args []string) error {
