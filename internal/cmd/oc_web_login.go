@@ -21,12 +21,15 @@ import (
 	"github.com/vshn/kharon/internal/pkg/lieutenant"
 )
 
+var ocWebLoginIDP string
+
 func init() {
 	RootCmd.AddCommand(ocWebLoginCmd)
 
 	flag := ocWebLoginCmd.Flags()
 	flag.StringVar(&clustersInventoryFile, "inventory-file", inventoryFilePath(), "Path to the inventory file that should be used by this command.")
 	flag.StringVar(&proxyAddr, "proxy-addr", defaultProxyAddr, "Address of the proxy to use in the generated kubeconfig file.")
+	flag.StringVar(&ocWebLoginIDP, "idp", "vshn-idp", "The name of the Identity Provider to use for login. If not specified, the user might be prompted to choose one on the OCP login page.")
 }
 
 const ocWebLoginCmdLongDesc = `Log in to OpenShift clusters with a web-based login.
@@ -191,6 +194,11 @@ func requestToken(ctx context.Context, apiURL string) (string, error) {
 	return tokenrequest.RequestTokenWithLocalCallback(&rest.Config{
 		Host: apiURL,
 	}, func(url *url.URL) error {
+		if ocWebLoginIDP != "" {
+			q := url.Query()
+			q.Set("idp", ocWebLoginIDP)
+			url.RawQuery = q.Encode()
+		}
 		return browser.OpenURL(ctx, url.String())
 	}, 0)
 }
