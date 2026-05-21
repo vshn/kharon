@@ -10,7 +10,7 @@ require (
 	github.com/google/go-cmp v0.7.0
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
 	github.com/kevinburke/ssh_config v1.6.0
-	github.com/minio/pkg/v3 v3.8.0
+	github.com/minio/pkg/v3 v3.8.1
 	github.com/oauth2-proxy/mockoidc v0.0.0-20240214162133-caebfff84d25
 	github.com/openshift/library-go v0.0.0-20260514170714-2291b9674896
 	github.com/spf13/cobra v1.10.2
