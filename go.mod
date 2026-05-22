@@ -10,18 +10,18 @@ require (
 	github.com/google/go-cmp v0.7.0
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
 	github.com/kevinburke/ssh_config v1.6.0
-	github.com/minio/pkg/v3 v3.8.0
+	github.com/minio/pkg/v3 v3.8.1
 	github.com/oauth2-proxy/mockoidc v0.0.0-20240214162133-caebfff84d25
-	github.com/openshift/library-go v0.0.0-20260514170714-2291b9674896
+	github.com/openshift/library-go v0.0.0-20260521161500-c83b770fc27c
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
 	go.uber.org/multierr v1.11.0
-	golang.org/x/crypto v0.51.0
+	golang.org/x/crypto v0.52.0
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/sync v0.20.0
 	k8s.io/client-go v0.36.1
 	sigs.k8s.io/yaml v1.6.0
-	tailscale.com v1.98.2
+	tailscale.com v1.98.3
 )
 
 require (
@@ -30,14 +30,14 @@ require (
 	github.com/fxamacker/cbor/v2 v2.9.2 // indirect
 	github.com/go-jose/go-jose/v3 v3.0.5 // indirect
 	github.com/go-jose/go-jose/v4 v4.1.4 // indirect
-	github.com/go-json-experiment/json v0.0.0-20260505212615-e40f80bf6836 // indirect
+	github.com/go-json-experiment/json v0.0.0-20260520185125-572e7c383686 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/kisielk/errcheck v1.20.0 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
-	github.com/mattn/go-isatty v0.0.20 // indirect
+	github.com/mattn/go-isatty v0.0.22 // indirect
 	github.com/miekg/dns v1.1.72 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee // indirect
@@ -49,8 +49,8 @@ require (
 	go4.org/mem v0.0.0-20240501181205-ae6ca9944745 // indirect
 	golang.org/x/exp v0.0.0-20260508232706-74f9aab9d74a // indirect
 	golang.org/x/mod v0.36.0 // indirect
-	golang.org/x/net v0.54.0 // indirect
-	golang.org/x/sys v0.44.0 // indirect
+	golang.org/x/net v0.55.0 // indirect
+	golang.org/x/sys v0.45.0 // indirect
 	golang.org/x/term v0.43.0 // indirect
 	golang.org/x/text v0.37.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
@@ -60,7 +60,7 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	k8s.io/apimachinery v0.36.1 // indirect
 	k8s.io/klog/v2 v2.140.0 // indirect
-	k8s.io/kube-openapi v0.0.0-20260512234627-ef417d054102 // indirect
+	k8s.io/kube-openapi v0.0.0-20260520065146-aa012df4f4af // indirect
 	k8s.io/utils v0.0.0-20260507154919-ff6756f316d2 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
