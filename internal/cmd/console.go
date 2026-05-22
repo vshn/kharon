@@ -9,6 +9,7 @@ import (
 	"github.com/vshn/kharon/internal/pkg/browser"
 	"github.com/vshn/kharon/internal/pkg/cache"
 	"github.com/vshn/kharon/internal/pkg/completion"
+	"github.com/vshn/kharon/internal/pkg/kubeconfig"
 	"github.com/vshn/kharon/internal/pkg/lieutenant"
 )
 
@@ -26,19 +27,22 @@ The command to open the console can be overridden by setting the KHARON_BROWSER 
 
 Works on the inventory downloaded by the 'update' command, so it does not require access to the Lieutenant API.`
 
-const consoleCmdExample = `# Open the console for a specific cluster
+const consoleCmdExample = `# Open the console for the current cluster
+kharon console
+
+# Open the console for a specific cluster
 kharon console c-12345
 
 # Open the cluster console in the non-default browser (e.g. Firefox) on macOS
 BROWSER="open -a firefox" kharon console c-12345`
 
 var consoleCmd = &cobra.Command{
-	Use:     "console c-cluster-id",
+	Use:     "console [c-cluster-id]",
 	Short:   "Open the web console for supported clusters.",
 	Long:    consoleCmdLongDesc,
 	Example: consoleCmdExample,
 	Run:     runConsole,
-	Args:    cobra.ExactArgs(1),
+	Args:    cobra.MaximumNArgs(1),
 	ValidArgsFunction: completion.ClusterID(clustersInventoryFile, func(cluster lieutenant.Cluster) bool {
 		api, _, _ := cluster.DynamicStringFact(lieutenant.KnownDynamicFactOpenshiftConsoleURL)
 		return api != ""
@@ -46,7 +50,10 @@ var consoleCmd = &cobra.Command{
 }
 
 func runConsole(cmd *cobra.Command, args []string) {
-	clusterID := args[0]
+	var clusterID string
+	if len(args) > 0 {
+		clusterID = args[0]
+	}
 
 	if clustersInventoryFile == "" {
 		slog.Error("Inventory file path is required", "error", "inventory-file flag is empty and failed to determine default path.")
@@ -59,19 +66,29 @@ func runConsole(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	var clusterFound bool
-	var consoleURL string
-	for _, c := range clusters {
-		if c.ID == clusterID {
-			clusterFound = true
-			consoleURL, _, _ = c.DynamicStringFact(lieutenant.KnownDynamicFactOpenshiftConsoleURL)
-			break
+	var cluster lieutenant.Cluster
+	if clusterID != "" {
+		c, found := lieutenant.FindByID(clusters, clusterID)
+		if !found {
+			slog.Error("Cluster not found", "cluster_id", clusterID)
+			os.Exit(1)
 		}
+		cluster = c
+	} else {
+		kcc, err := kubeconfig.CurrentClusterConfig()
+		if err != nil {
+			slog.Error("Failed to get current cluster config from kubeconfig", "error", err)
+			os.Exit(1)
+		}
+		c, found := lieutenant.FindByAPIURL(clusters, kcc.Server)
+		if !found {
+			slog.Error("No cluster found in inventory with API URL matching current kubeconfig context", "api_url", kcc.Server)
+			os.Exit(1)
+		}
+		cluster = c
 	}
-	if !clusterFound {
-		slog.Error("Cluster not found", "cluster_id", clusterID)
-		os.Exit(1)
-	}
+
+	consoleURL, _, _ := cluster.DynamicStringFact(lieutenant.KnownDynamicFactOpenshiftConsoleURL)
 	if consoleURL == "" {
 		slog.Error("No console URL found for the specified cluster", "cluster_id", clusterID)
 		os.Exit(1)

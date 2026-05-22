@@ -92,3 +92,23 @@ func (c *Client) GetClusters(ctx context.Context) ([]Cluster, error) {
 	}
 	return clusters, nil
 }
+
+// FindByID searches for a cluster with the given ID in the provided slice of clusters.
+func FindByID(clusters []Cluster, id string) (Cluster, bool) {
+	for _, cluster := range clusters {
+		if cluster.ID == id {
+			return cluster, true
+		}
+	}
+	return Cluster{}, false
+}
+
+// FindByAPIURL searches for a cluster with the given OpenShift API URL in the provided slice of clusters.
+func FindByAPIURL(clusters []Cluster, apiURL string) (Cluster, bool) {
+	for _, cluster := range clusters {
+		if url, ok, _ := cluster.DynamicStringFact(KnownDynamicFactOpenshiftApiURL); ok && url == apiURL {
+			return cluster, true
+		}
+	}
+	return Cluster{}, false
+}
