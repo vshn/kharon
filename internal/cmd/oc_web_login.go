@@ -92,15 +92,14 @@ func loginWithClusterID(ctx context.Context, clusterID string) {
 		os.Exit(1)
 	}
 
-	var apiURL string
-	for _, c := range clusters {
-		if c.ID == clusterID {
-			apiURL, _, _ = c.DynamicStringFact(lieutenant.KnownDynamicFactOpenshiftApiURL)
-			break
-		}
+	cluster, found := lieutenant.FindByID(clusters, clusterID)
+	if !found {
+		slog.Error("Cluster not found", "cluster_id", clusterID)
+		os.Exit(1)
 	}
+	apiURL, _, _ := cluster.DynamicStringFact(lieutenant.KnownDynamicFactOpenshiftApiURL)
 	if apiURL == "" {
-		slog.Error("Cluster not found or does not have a known API URL", "clusterID", clusterID)
+		slog.Error("Cluster not found or does not have a known API URL", "cluster_id", clusterID)
 		os.Exit(1)
 	}
 	if err := setProxyEnv(fmt.Sprintf("socks5h://%s", proxyAddr)); err != nil {
