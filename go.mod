@@ -16,7 +16,7 @@ require (
 	github.com/kevinburke/ssh_config v1.6.0
 	github.com/minio/pkg/v3 v3.8.1
 	github.com/oauth2-proxy/mockoidc v0.0.0-20240214162133-caebfff84d25
-	github.com/openshift/library-go v0.0.0-20260521161500-c83b770fc27c
+	github.com/openshift/library-go v0.0.0-20260526144604-4be142795161
 	github.com/passbolt/go-passbolt v0.7.2
 	github.com/pquerna/otp v1.5.0
 	github.com/spf13/cobra v1.10.2
