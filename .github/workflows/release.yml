@@ -93,7 +93,7 @@ jobs:
   bump-pkgbuild:
     needs: publish
     # Skip PreReleases (tags containing '-', e.g. 'v1.0.0-alpha.1').
-    if: ${{ !contains(github.ref, '-') }}
+    # if: ${{ !contains(github.ref, '-') }}
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -101,7 +101,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           ref: main
-          token: ${{ secrets.GITHUB_TOKEN }}
+          ssh-key: ${{ secrets.BUMP_PKGBUILD_DEPLOY_KEY }}
 
       - name: Bump PKGBUILD pkgver
         run: |
