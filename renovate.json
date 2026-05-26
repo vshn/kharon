@@ -12,6 +12,12 @@
   ],
   "packageRules": [
     {
+      "schedule": ["on the thirteenth day of the month"],
+      "matchPackageNames": [
+        "/github.com/openshift/library-go/"
+      ]
+    },
+    {
       "matchManagers": ["github-actions"],
       "groupName": "github actions dependencies"
     }
