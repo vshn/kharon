@@ -18,6 +18,7 @@ test: ## Run tests
 .PHONY: build
 build: generate ## Build binary
 	go build -o $(BIN_FILENAME) .
+	ls -lh $(BIN_FILENAME)
 
 .PHONY: generate
 generate: ## Run go generate against code
@@ -26,6 +27,7 @@ generate: ## Run go generate against code
 .PHONY: fmt
 fmt: ## Run go fmt against code
 	go fmt ./...
+	go tool golang.org/x/tools/cmd/goimports -w -local=github.com/vshn/kharon .
 
 .PHONY: vet
 vet: ## Run go vet against code

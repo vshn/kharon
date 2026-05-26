@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "clusters": [
+    {
+      "id": "c-appuio-lab-cloudscale-rma-0",
+      "displayName": "APPUiO Cloud Lab RMA 0",
+      "tenant": "t-falling-frog-2211",
+      "facts": {},
+      "dynamicFacts": {
+        "openshiftApiURL": "https://api.lab-cloudscale-rma-0.appuio.cloud:6443",
+        "openshiftAppsDomain": "apps.lab-cloudscale-rma-0.appuio.cloud",
+        "openshiftBaseDomain": "lab-cloudscale-rma-0.appuio.cloud",
+        "openshiftConsoleURL": "https://console.lab-cloudscale-rma-0.appuio.cloud",
+        "openshiftOAuthRoute": "oauth-openshift.apps.lab-cloudscale-rma-0.appuio.cloud",
+        "openshiftVersion": {
+          "Major": "4",
+          "Minor": "20",
+          "Patch": "22"
+        }
+      }
+    }
+  ]
+}

@@ -103,7 +103,7 @@ func runShell(cmd *cobra.Command, flags *shellCmdFlags, args []string) error {
 	}
 
 	// Kubeconfig wants a socks5 url not socks5h, but they are treated the same by Go.
-	tmpKubeconfig, err := writeKubeconfigToTempFile(kubeconfig.FromClusters(clusters, fmt.Sprintf("socks5://%s", flags.ProxyAddr), clusterID))
+	tmpKubeconfig, err := writeKubeconfigToTempFile(kubeconfig.FromClusters(clusters, proxyAddrForKubeconfig(flags.ProxyAddr), clusterID))
 	if err != nil {
 		return fmt.Errorf("failed to write kubeconfig to temporary file: %w", err)
 	}
@@ -137,7 +137,7 @@ func runShell(cmd *cobra.Command, flags *shellCmdFlags, args []string) error {
 	ex := exec.Command(execCmd, execArgs...)
 	ex.Env = append(os.Environ(), "KHARON_SHELL=1", fmt.Sprintf("KUBECONFIG=%s", tmpKubeconfig))
 	for _, ev := range []string{"http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY"} {
-		ex.Env = append(ex.Env, fmt.Sprintf("%s=socks5h://%s", ev, flags.ProxyAddr))
+		ex.Env = append(ex.Env, fmt.Sprintf("%s=%s", ev, proxyAddrForShell(flags.ProxyAddr)))
 	}
 	ex.Stdin = cmd.InOrStdin()
 	ex.Stdout = cmd.OutOrStdout()

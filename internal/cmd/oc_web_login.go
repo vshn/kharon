@@ -102,7 +102,7 @@ func loginWithClusterID(ctx context.Context, clusterID string) {
 		slog.Error("Cluster not found or does not have a known API URL", "cluster_id", clusterID)
 		os.Exit(1)
 	}
-	if err := setProxyEnv(fmt.Sprintf("socks5h://%s", proxyAddr)); err != nil {
+	if err := setProxyEnv(proxyAddrForShell(proxyAddr)); err != nil {
 		slog.Error("Failed to set proxy environment variables", slog.Any("error", err))
 		os.Exit(1)
 	}
@@ -111,14 +111,14 @@ func loginWithClusterID(ctx context.Context, clusterID string) {
 		slog.Error("Failed to request token", slog.Any("error", err))
 		os.Exit(1)
 	}
-	if err := kubeconfig.InsertConnectionInfoIntoKubeconfig(clusterID, apiURL, fmt.Sprintf("socks5://%s", proxyAddr), tok); err != nil {
+	if err := kubeconfig.InsertConnectionInfoIntoKubeconfig(clusterID, apiURL, proxyAddrForKubeconfig(proxyAddr), tok); err != nil {
 		slog.Error("Failed to insert connection info into kubeconfig", slog.Any("error", err))
 		os.Exit(1)
 	}
 }
 
 func loginWithURL(ctx context.Context, apiURL string) {
-	if err := setProxyEnv(fmt.Sprintf("socks5h://%s", proxyAddr)); err != nil {
+	if err := setProxyEnv(proxyAddrForShell(proxyAddr)); err != nil {
 		slog.Error("Failed to set proxy environment variables", slog.Any("error", err))
 		os.Exit(1)
 	}
@@ -127,7 +127,7 @@ func loginWithURL(ctx context.Context, apiURL string) {
 		slog.Error("Failed to request token", slog.Any("error", err))
 		os.Exit(1)
 	}
-	if err := kubeconfig.InsertConnectionInfoIntoKubeconfig("", apiURL, fmt.Sprintf("socks5://%s", proxyAddr), tok); err != nil {
+	if err := kubeconfig.InsertConnectionInfoIntoKubeconfig("", apiURL, proxyAddrForKubeconfig(proxyAddr), tok); err != nil {
 		slog.Error("Failed to insert connection info into kubeconfig", slog.Any("error", err))
 		os.Exit(1)
 	}
@@ -212,4 +212,11 @@ func setProxyEnv(proxyURL string) error {
 		}
 	}
 	return nil
+}
+
+func proxyAddrForShell(addr string) string {
+	if addr == "" {
+		return ""
+	}
+	return fmt.Sprintf("socks5h://%s", addr)
 }
