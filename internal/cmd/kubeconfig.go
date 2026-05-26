@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"fmt"
 	"log/slog"
 	"os"
 
@@ -68,7 +67,7 @@ func runKubeconfig(cmd *cobra.Command, args []string) {
 	}
 
 	// Kubeconfig wants a socks5 url not socks5h, but they are treated the same by Go.
-	if err := kubeconfig.Encode(kubeconfig.FromClusters(clusters, fmt.Sprintf("socks5://%s", proxyAddr), clusterID), os.Stdout); err != nil {
+	if err := kubeconfig.Encode(kubeconfig.FromClusters(clusters, proxyAddrForKubeconfig(proxyAddr), clusterID), os.Stdout); err != nil {
 		slog.Error("Failed to encode kubeconfig", "error", err)
 		os.Exit(1)
 	}

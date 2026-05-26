@@ -10,9 +10,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"sigs.k8s.io/yaml"
+
 	"github.com/vshn/kharon/internal/pkg/cache"
 	"github.com/vshn/kharon/internal/pkg/lieutenant"
-	"sigs.k8s.io/yaml"
 )
 
 const stubShellScript = `#!/bin/sh

@@ -14,7 +14,7 @@ import (
 )
 
 func TestLogin(t *testing.T) {
-	t.Setenv("BROWSER", "go run ./testdata/browser")
+	t.Setenv("KHARON_BROWSER", "go run ./testdata/browser")
 	m, err := mockoidc.NewServer(nil)
 	require.NoError(t, err)
 
