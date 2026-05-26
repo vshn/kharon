@@ -360,6 +360,68 @@ func Test_CurrentClusterConfig(t *testing.T) {
 	}
 }
 
+func Test_SetCurrentContext(t *testing.T) {
+	tcs := []struct {
+		name               string
+		startingKubeconfig *kubeconfig.Config
+		contextToSet       string
+		expectedKubeconfig *kubeconfig.Config
+		wantErr            string
+	}{
+		{
+			name:               "empty kubeconfig",
+			startingKubeconfig: kcapi.NewConfig(),
+			contextToSet:       "test-context",
+			wantErr:            "context \"test-context\" not found in kubeconfig",
+		}, {
+			name: "context not found in kubeconfig",
+			startingKubeconfig: func() *kubeconfig.Config {
+				kc := kcapi.NewConfig()
+				kc.Contexts["other-context"] = &kcapi.Context{}
+				return kc
+			}(),
+			contextToSet: "test-context",
+			wantErr:      "context \"test-context\" not found in kubeconfig",
+		}, {
+			name: "context exists in kubeconfig",
+			startingKubeconfig: func() *kubeconfig.Config {
+				kc := kcapi.NewConfig()
+				kc.Contexts["test-context"] = &kcapi.Context{}
+				return kc
+			}(),
+			contextToSet: "test-context",
+			expectedKubeconfig: func() *kubeconfig.Config {
+				kc := kcapi.NewConfig()
+				kc.Contexts["test-context"] = &kcapi.Context{}
+				kc.CurrentContext = "test-context"
+				return kc
+			}(),
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			td := t.TempDir()
+			kubeconfigPath := td + "/kubeconfig"
+			require.NoError(t, clientcmd.WriteToFile(*tc.startingKubeconfig, kubeconfigPath))
+			t.Setenv("KUBECONFIG", kubeconfigPath)
+
+			err := kubeconfig.SetCurrentContext(tc.contextToSet)
+			if tc.wantErr != "" {
+				require.ErrorContains(t, err, tc.wantErr)
+				return
+			}
+			require.NoError(t, err)
+
+			kubeConfig, err := new(clientcmd.ClientConfigLoadingRules{ExplicitPath: kubeconfigPath}).Load()
+			require.NoError(t, err)
+			if diff := cmp.Diff(kubeConfig, tc.expectedKubeconfig, kubeconfigDiffOptions()); diff != "" {
+				t.Errorf("kubeConfig mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
 func kubeconfigDiffOptions() cmp.Options {
 	return cmp.Options{
 		cmpopts.EquateEmpty(),

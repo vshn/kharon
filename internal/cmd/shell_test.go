@@ -31,9 +31,22 @@ func Test_RunShell(t *testing.T) {
 	tmpInventoryFile := filepath.Join(t.TempDir(), "inventory.json")
 	require.NoError(t, cache.WriteInventoryFile(tmpInventoryFile, []lieutenant.Cluster{
 		{
-			ID: "c-inventory",
+			ID: "c-no-api-url",
+		},
+		{
+			ID: "c-inventory-1",
 			DynamicFacts: map[string]any{
-				lieutenant.KnownDynamicFactOpenshiftApiURL: "https://api.cluster-inventory.example.com",
+				lieutenant.KnownDynamicFactOpenshiftApiURL: "https://api.cluster-inventory-1.example.com",
+			},
+		}, {
+			ID: "c-inventory-2",
+			DynamicFacts: map[string]any{
+				lieutenant.KnownDynamicFactOpenshiftApiURL: "https://api.cluster-inventory-2.example.com",
+			},
+		}, {
+			ID: "c-other-cluster",
+			DynamicFacts: map[string]any{
+				lieutenant.KnownDynamicFactOpenshiftApiURL: "https://api.cluster-other-cluster.example.com",
 			},
 		},
 	}))
@@ -61,7 +74,7 @@ func Test_RunShell(t *testing.T) {
 
 			expectedStdout: "stubsh --login",
 
-			expectedCurrentContext: "c-inventory",
+			expectedCurrentContext: "c-inventory-1",
 		},
 		{
 			name: "defaults to login shell",
@@ -120,10 +133,31 @@ func Test_RunShell(t *testing.T) {
 
 			expectedExitCode:      42,
 			expectedErrorContains: "exit status 42",
+		}, {
+			name: "filters clusters with wildcard pattern and uses first match as context",
+
+			args: []string{"*inventory*", "--each", "--", "go", "run", "./testdata/kubectx"},
+
+			expectedStdout: `--- # c-inventory-1
+c-inventory-1
+--- # c-inventory-2
+c-inventory-2`,
+		}, {
+			name: "execution does not fail on first cluster failure when using --each",
+
+			args: []string{"*inventory*", "--each", "--", "sh", "-c", "echo 'oh no';exit 34"},
+
+			expectedStdout: `--- # c-inventory-1
+oh no
+
+--- # c-inventory-2
+oh no`,
+			expectedErrorContains: "failed to run command for cluster c-inventory-1: provided command exited with code 34: exit status 34; failed to run command for cluster c-inventory-2: provided command exited with code 34: exit status 34",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			cmd := newShellCmd()
+			cmd.SilenceUsage = true
 			cmd.SetArgs(append([]string{"--inventory-file", tmpInventoryFile}, tc.args...))
 			stdout := new(bytes.Buffer)
 			cmd.SetOut(stdout)

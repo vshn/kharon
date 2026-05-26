@@ -106,6 +106,18 @@ func InsertConnectionInfoIntoKubeconfig(contextName, apiURL, proxyURL, token str
 	})
 }
 
+// SetCurrentContext sets the current context in the kubeconfig to the given context name.
+// It returns an error if the context does not exist in the kubeconfig.
+func SetCurrentContext(contextName string) error {
+	return updateKubeconfig(func(config *model.Config) error {
+		if _, ok := config.Contexts[contextName]; !ok {
+			return fmt.Errorf("context %q not found in kubeconfig", contextName)
+		}
+		config.CurrentContext = contextName
+		return nil
+	})
+}
+
 // CurrentClusterConfig returns the cluster configuration of the current context in the kubeconfig.
 // It returns an error if the current context is not set or invalid, or if the cluster referenced by the current context is not found.
 func CurrentClusterConfig() (*model.Cluster, error) {
