@@ -138,8 +138,8 @@ github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 h1:C3w9PqII01/Oq
 github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822/go.mod h1:+n7T8mK8HuQTcFwEeznm/DIxMOiR9yIdICNftLE1DvQ=
 github.com/oauth2-proxy/mockoidc v0.0.0-20240214162133-caebfff84d25 h1:9bCMuD3TcnjeqjPT2gSlha4asp8NvgcFRYExCaikCxk=
 github.com/oauth2-proxy/mockoidc v0.0.0-20240214162133-caebfff84d25/go.mod h1:eDjgYHYDJbPLBLsyZ6qRaugP0mX8vePOhZ5id1fdzJw=
-github.com/openshift/library-go v0.0.0-20260521161500-c83b770fc27c h1:0GCOuBKcKhhoxSOlmgfddLaxV5TVb4gFvFrZPZzVDjs=
-github.com/openshift/library-go v0.0.0-20260521161500-c83b770fc27c/go.mod h1:gKG9lctU0yEftSoT3DUyeIWz1oAgF0EHUpwI4pnCo4o=
+github.com/openshift/library-go v0.0.0-20260526144604-4be142795161 h1:bhrPAfYYhVx8yI4l/nFb4wB4/0jj2VtZh+hlXaj7vow=
+github.com/openshift/library-go v0.0.0-20260526144604-4be142795161/go.mod h1:gKG9lctU0yEftSoT3DUyeIWz1oAgF0EHUpwI4pnCo4o=
 github.com/passbolt/go-passbolt v0.7.2 h1:1kmtMq9Banqj5b6dFHV5M4M/1dOzdY0/gEjuj/JKDRs=
 github.com/passbolt/go-passbolt v0.7.2/go.mod h1:hWlTwpH5vuFKRHQdOZL5GfphqTc4O/z2iLHpSWSuqUk=
 github.com/pkg/errors v0.9.1 h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=
