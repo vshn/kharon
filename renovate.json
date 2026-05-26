@@ -12,7 +12,7 @@
   ],
   "packageRules": [
     {
-      "schedule": ["on the thirteenth day of the month"],
+      "schedule": ["0 10 13 * *"],
       "matchPackageNames": [
         "/github.com/openshift/library-go/"
       ]
