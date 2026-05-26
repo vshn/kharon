@@ -29,7 +29,7 @@ func init() {
 
 func Execute() {
 	if err := RootCmd.ExecuteContext(context.Background()); err != nil {
-		_, _ = fmt.Fprintln(RootCmd.ErrOrStderr(), "Error:", err)
+		_, _ = fmt.Fprintf(RootCmd.ErrOrStderr(), "%+v\n", err)
 		if exerr, ok := errors.AsType[*ErrWithExitCode](err); ok {
 			os.Exit(exerr.ExitCode)
 		}
