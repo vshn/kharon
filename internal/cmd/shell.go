@@ -35,6 +35,7 @@ See examples below for details.
 Using the --each flag, the command can be run for each cluster individually instead of once with a kubeconfig containing all clusters.
 In this case, the command is run once per cluster with the current context set to that cluster. Failures for individual clusters do not stop the execution for other clusters, but are reported at the end.
 The output of each command is prefixed with the cluster ID for clarity. The --command flag is implied when using --each.
+The --each flag implies that the cluster argument is treated as a pattern, even if it does not contain wildcards.
 
 Works on the inventory downloaded by the 'update' command, so it does not require access to the Lieutenant API.`
 
@@ -125,7 +126,7 @@ func runShell(cmd *cobra.Command, flags *shellCmdFlags, args []string) error {
 
 	var pattern, clusterID string
 	if clusterIDOrPattern != "" {
-		if wildcard.Has(clusterIDOrPattern) {
+		if wildcard.Has(clusterIDOrPattern) || flags.Each {
 			pattern = clusterIDOrPattern
 		} else {
 			clusterID = clusterIDOrPattern

@@ -159,6 +159,12 @@ oh no`,
 			args: []string{"*inventory*", "--each", "--exclude-cluster", "c-inventory-1", "--", "sh", "-c", "exit 0"},
 
 			expectedStdout: `--- # c-inventory-2`,
+		}, {
+			name: "--each forces cluster pattern matching even without wildcards",
+
+			args: []string{"c-inventory-1", "--each", "--", "sh", "-c", "exit 0"},
+
+			expectedStdout: `--- # c-inventory-1`,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
