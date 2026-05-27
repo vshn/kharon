@@ -112,11 +112,11 @@ func Test_EmergencyCredentials_Interactive(t *testing.T) {
 		io.Copy(&out, pty)
 	})
 
-	sendToPrompt(t, pty, &out, "Please paste the passbolt key", key+"\n\x04")
+	sendToPrompt(t, pty, &out, "Please paste the passbolt key", func() string { return key + "\n\x04" })
 
-	sendToPrompt(t, pty, &out, "Please enter your Passbolt passphrase", passphrase+"\n")
+	sendToPrompt(t, pty, &out, "Please enter your Passbolt passphrase", func() string { return passphrase + "\n" })
 
-	sendToPrompt(t, pty, &out, "Please enter the Passbolt TOTP code", mustGenerateTOTPCode(t, totp)+"\n")
+	sendToPrompt(t, pty, &out, "Please enter the Passbolt TOTP code", func() string { return mustGenerateTOTPCode(t, totp) + "\n" })
 
 	wg.Wait()
 
@@ -125,7 +125,7 @@ func Test_EmergencyCredentials_Interactive(t *testing.T) {
 	mustHaveNodeDeletePermissions(t, kubeconfigPath)
 }
 
-func sendToPrompt(t *testing.T, pty *os.File, out *bytes.Buffer, prompt string, response string) {
+func sendToPrompt(t *testing.T, pty *os.File, out *bytes.Buffer, prompt string, response func() string) {
 	timeout := time.After(30 * time.Second)
 	t.Helper()
 
@@ -145,7 +145,7 @@ func sendToPrompt(t *testing.T, pty *os.File, out *bytes.Buffer, prompt string, 
 		default:
 		}
 	}
-	_, err := pty.WriteString(response)
+	_, err := pty.WriteString(response())
 	require.NoError(t, err, "Failed to write response to stdin")
 }
 
