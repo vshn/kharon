@@ -89,6 +89,7 @@ func newShellCmd() *cobra.Command {
 	flag.BoolVar(&flags.Command, "command", false, "Run the command at the first argument after cluster ID instead of the default shell.")
 	flag.BoolVar(&flags.Each, "each", false, "Run the command for each cluster individually instead of once with a kubeconfig containing all clusters. This flag implies --command.")
 	flag.StringSliceVar(&flags.ClusterExcludePatterns, "exclude-cluster", nil, "Exclude clusters matching the given patterns. Supports wildcards, e.g. `--exclude-cluster=c-dev-*` to exclude all clusters starting with `c-dev-`. This flag can be used multiple times to exclude multiple patterns. Useful in combination with --each to exclude certain clusters from the per-cluster execution.")
+	must(cmd.RegisterFlagCompletionFunc("exclude-cluster", completion.ClusterID(flags.InventoryFile, nil)))
 
 	return cmd
 }
