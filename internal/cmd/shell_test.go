@@ -153,6 +153,12 @@ oh no
 --- # c-inventory-2
 oh no`,
 			expectedErrorContains: "failed to run command for cluster c-inventory-1: provided command exited with code 34: exit status 34; failed to run command for cluster c-inventory-2: provided command exited with code 34: exit status 34",
+		}, {
+			name: "--exclude-cluster",
+
+			args: []string{"*inventory*", "--each", "--exclude-cluster", "c-inventory-1", "--", "sh", "-c", "exit 0"},
+
+			expectedStdout: `--- # c-inventory-2`,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
