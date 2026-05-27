@@ -140,10 +140,11 @@ func runShell(cmd *cobra.Command, flags *shellCmdFlags, args []string) error {
 		if pattern != "" && !wildcard.Match(pattern, cluster.ID) {
 			continue
 		}
-		for _, excludePattern := range flags.ClusterExcludePatterns {
-			if wildcard.Match(excludePattern, cluster.ID) {
-				continue
-			}
+
+		if slices.ContainsFunc(flags.ClusterExcludePatterns, func(excludePattern string) bool {
+			return wildcard.Match(excludePattern, cluster.ID)
+		}) {
+			continue
 		}
 		filtered = append(filtered, cluster)
 	}
