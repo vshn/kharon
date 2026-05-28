@@ -3,22 +3,17 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"log/slog"
-	"net/http"
-	"net/url"
 	"os"
 	"strings"
 
-	"github.com/openshift/library-go/pkg/oauth/tokenrequest"
 	"github.com/spf13/cobra"
-	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
-	"github.com/vshn/kharon/internal/pkg/browser"
 	"github.com/vshn/kharon/internal/pkg/cache"
 	"github.com/vshn/kharon/internal/pkg/completion"
 	"github.com/vshn/kharon/internal/pkg/kubeconfig"
 	"github.com/vshn/kharon/internal/pkg/lieutenant"
+	"github.com/vshn/kharon/internal/pkg/ocptoken"
 )
 
 var ocWebLoginIDP string
@@ -58,7 +53,7 @@ var ocWebLoginCmd = &cobra.Command{
 	Short:   "Log in to OpenShift clusters with a web-based login.",
 	Long:    ocWebLoginCmdLongDesc,
 	Example: ocWebLoginCmdExample,
-	Run:     runOCWebLogin,
+	RunE:    runOCWebLogin,
 	Args:    cobra.MaximumNArgs(1),
 	ValidArgsFunction: completion.ClusterID(clustersInventoryFile, func(cluster lieutenant.Cluster) bool {
 		api, _, _ := cluster.DynamicStringFact(lieutenant.KnownDynamicFactOpenshiftApiURL)
@@ -66,140 +61,90 @@ var ocWebLoginCmd = &cobra.Command{
 	}),
 }
 
-func runOCWebLogin(cmd *cobra.Command, args []string) {
+func runOCWebLogin(cmd *cobra.Command, args []string) error {
 	if len(args) == 0 {
-		loginCurrentContext(cmd.Context())
-		return
+		return loginCurrentContext(cmd.Context())
 	}
 
 	clusterIDOrURL := args[0]
 	if strings.HasPrefix(clusterIDOrURL, "http://") || strings.HasPrefix(clusterIDOrURL, "https://") {
-		loginWithURL(cmd.Context(), clusterIDOrURL)
+		return loginWithURL(cmd.Context(), clusterIDOrURL)
 	} else {
-		loginWithClusterID(cmd.Context(), clusterIDOrURL)
+		return loginWithClusterID(cmd.Context(), clusterIDOrURL)
 	}
 }
 
-func loginWithClusterID(ctx context.Context, clusterID string) {
+func loginWithClusterID(ctx context.Context, clusterID string) error {
 	if clustersInventoryFile == "" {
-		slog.Error("Inventory file path is required", "error", "inventory-file flag is empty and failed to determine default path.")
-		os.Exit(1)
+		return fmt.Errorf("inventory file path is required: inventory-file flag is empty and failed to determine default path")
 	}
 
 	clusters, err := cache.ReadInventoryFile(clustersInventoryFile)
 	if err != nil {
-		slog.Error("Failed to read inventory file. You might need to run the `update` command first.", "error", err)
-		os.Exit(1)
+		return fmt.Errorf("failed to read inventory file. You might need to run the `update` command first: %w", err)
 	}
 
 	cluster, found := lieutenant.FindByID(clusters, clusterID)
 	if !found {
-		slog.Error("Cluster not found", "cluster_id", clusterID)
-		os.Exit(1)
+		return fmt.Errorf("cluster %q not found", clusterID)
 	}
 	apiURL, _, _ := cluster.DynamicStringFact(lieutenant.KnownDynamicFactOpenshiftApiURL)
 	if apiURL == "" {
-		slog.Error("Cluster not found or does not have a known API URL", "cluster_id", clusterID)
-		os.Exit(1)
+		return fmt.Errorf("cluster %q does not have a known API URL", clusterID)
 	}
 	if err := setProxyEnv(proxyAddrForShell(proxyAddr)); err != nil {
-		slog.Error("Failed to set proxy environment variables", slog.Any("error", err))
-		os.Exit(1)
+		return fmt.Errorf("failed to set proxy environment variables: %w", err)
 	}
-	tok, err := requestToken(ctx, apiURL)
+	tok, err := ocptoken.EnsureToken(ctx, "", apiURL, ocWebLoginIDP)
 	if err != nil {
-		slog.Error("Failed to request token", slog.Any("error", err))
-		os.Exit(1)
+		return fmt.Errorf("failed to request token: %w", err)
 	}
 	if err := kubeconfig.InsertConnectionInfoIntoKubeconfig(clusterID, apiURL, proxyAddrForKubeconfig(proxyAddr), tok); err != nil {
-		slog.Error("Failed to insert connection info into kubeconfig", slog.Any("error", err))
-		os.Exit(1)
+		return fmt.Errorf("failed to insert connection info into kubeconfig: %w", err)
 	}
+	return nil
 }
 
-func loginWithURL(ctx context.Context, apiURL string) {
+func loginWithURL(ctx context.Context, apiURL string) error {
 	if err := setProxyEnv(proxyAddrForShell(proxyAddr)); err != nil {
-		slog.Error("Failed to set proxy environment variables", slog.Any("error", err))
-		os.Exit(1)
+		return fmt.Errorf("failed to set proxy environment variables: %w", err)
 	}
-	tok, err := requestToken(ctx, apiURL)
+	tok, err := ocptoken.EnsureToken(ctx, "", apiURL, ocWebLoginIDP)
 	if err != nil {
-		slog.Error("Failed to request token", slog.Any("error", err))
-		os.Exit(1)
+		return fmt.Errorf("failed to request token: %w", err)
 	}
 	if err := kubeconfig.InsertConnectionInfoIntoKubeconfig("", apiURL, proxyAddrForKubeconfig(proxyAddr), tok); err != nil {
-		slog.Error("Failed to insert connection info into kubeconfig", slog.Any("error", err))
-		os.Exit(1)
+		return fmt.Errorf("failed to insert connection info into kubeconfig: %w", err)
 	}
+	return nil
 }
 
-func loginCurrentContext(ctx context.Context) {
+func loginCurrentContext(ctx context.Context) error {
 	kc, err := kubeconfig.CurrentClusterConfig()
 	if err != nil {
-		slog.Error("Failed to get current cluster config", slog.Any("error", err))
-		os.Exit(1)
+		return fmt.Errorf("failed to get current cluster config: %w", err)
 	}
 	if kc.ProxyURL != "" {
 		// While the url might have a `socks5://` scheme, Go treats `socks5://` and `socks5h://` the same.
 		if err := setProxyEnv(kc.ProxyURL); err != nil {
-			slog.Error("Failed to set proxy environment variables", slog.Any("error", err))
-			os.Exit(1)
+			return fmt.Errorf("failed to set proxy environment variables: %w", err)
 		}
 	}
 
 	cfg, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(clientcmd.NewDefaultClientConfigLoadingRules(), &clientcmd.ConfigOverrides{}).ClientConfig()
 	if err != nil {
-		slog.Error("Failed to load kubeconfig", slog.Any("error", err))
-		os.Exit(1)
+		return fmt.Errorf("failed to load kubeconfig: %w", err)
 	}
 
-	resp, err := lightSSR(cfg)
-	l := slog.With("error", err)
-	if resp != nil {
-		l = l.With("status", resp.Status)
-	}
-	l.Debug("SelfSubjectReview response")
-	if err == nil && resp.StatusCode == 201 {
-		slog.Info("Already logged in.")
-		return
-	}
-
-	tok, err := requestToken(ctx, cfg.Host)
+	tok, err := ocptoken.EnsureToken(ctx, cfg.BearerToken, kc.Server, ocWebLoginIDP)
 	if err != nil {
-		slog.Error("Failed to request token", slog.Any("error", err))
-		os.Exit(1)
+		return fmt.Errorf("failed to ensure token: %w", err)
 	}
+
 	if err := kubeconfig.InsertTokenIntoCurrentContext(tok); err != nil {
-		slog.Error("Failed to insert token into kubeconfig", slog.Any("error", err))
-		os.Exit(1)
+		return fmt.Errorf("failed to insert token into kubeconfig: %w", err)
 	}
-}
-
-// Including the openshift or kubenetes client more than doubles the size of the binary, so we implement a very minimal version of the SelfSubjectReview API call.
-func lightSSR(cfg *rest.Config) (*http.Response, error) {
-	c, err := rest.HTTPClientFor(cfg)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create HTTP client for kubeconfig: %w", err)
-	}
-	url, _, err := rest.DefaultServerUrlFor(cfg)
-	if err != nil {
-		return nil, fmt.Errorf("failed to determine API server URL from kubeconfig: %w", err)
-	}
-	url.Path = "/apis/authentication.k8s.io/v1/selfsubjectreviews"
-	return c.Post(url.String(), "application/json", strings.NewReader(`{"kind":"SelfSubjectReview","apiVersion":"authentication.k8s.io/v1"}`))
-}
-
-func requestToken(ctx context.Context, apiURL string) (string, error) {
-	return tokenrequest.RequestTokenWithLocalCallback(&rest.Config{
-		Host: apiURL,
-	}, func(url *url.URL) error {
-		if ocWebLoginIDP != "" {
-			q := url.Query()
-			q.Set("idp", ocWebLoginIDP)
-			url.RawQuery = q.Encode()
-		}
-		return browser.OpenURL(ctx, url.String())
-	}, 0)
+	return nil
 }
 
 func setProxyEnv(proxyURL string) error {
