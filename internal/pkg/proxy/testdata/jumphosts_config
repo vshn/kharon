@@ -5,7 +5,7 @@ Host chain1.2
   ProxyJump chain1.3
 
 Host chain1.3
-  UserName test
+  User test
 
 Host chain.2.target
   ProxyJump chain2.2

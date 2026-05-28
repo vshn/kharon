@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"github.com/foxcpp/go-mockdns"
-	"github.com/kevinburke/ssh_config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/ssh"
@@ -34,13 +33,11 @@ import (
 
 	"github.com/vshn/kharon/internal/pkg/cache"
 	"github.com/vshn/kharon/internal/pkg/proxy/mapping"
+	"github.com/vshn/kharon/internal/pkg/sshconfig"
 )
 
 func Test_jumphostChainForTarget(t *testing.T) {
-	u := ssh_config.UserSettings{}
-	u.ConfigFinder(func() string {
-		return filepath.Join("testdata", "jumphosts_config")
-	})
+	u := sshconfig.NewSSHConfigWithCache("testdata/jumphosts_config")
 
 	tests := []struct {
 		name            string
@@ -86,7 +83,7 @@ func Test_jumphostChainForTarget(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := jumphostChainForTarget(&u, tt.host)
+			got, err := jumphostChainForTarget(u, tt.host)
 			if tt.wantErrMatching != "" {
 				assert.ErrorContains(t, err, tt.wantErrMatching)
 				return
@@ -217,13 +214,7 @@ func Test_Start(t *testing.T) {
 	defer cancel()
 
 	p := Proxy{
-		SSHConfig: func() *ssh_config.UserSettings {
-			u := &ssh_config.UserSettings{}
-			u.ConfigFinder(func() string {
-				return sshConfigPath
-			})
-			return u
-		},
+		SSHConfigFile: sshConfigPath,
 		DirectDialer: net.Dialer{
 			Resolver: localDNSResolver,
 		},
@@ -374,13 +365,7 @@ func Test_Start_AutomaticShutdown(t *testing.T) {
 	defer cancel()
 
 	p := Proxy{
-		SSHConfig: func() *ssh_config.UserSettings {
-			u := &ssh_config.UserSettings{}
-			u.ConfigFinder(func() string {
-				return sshConfigPath
-			})
-			return u
-		},
+		SSHConfigFile: sshConfigPath,
 		DirectDialer: net.Dialer{
 			Resolver: localDNSResolver,
 		},
