@@ -92,8 +92,6 @@ require (
 	sigs.k8s.io/structured-merge-diff/v6 v6.4.0 // indirect
 )
 
-replace github.com/kevinburke/ssh_config => ./hack/ssh_config
-
 tool (
 	github.com/kisielk/errcheck
 	golang.org/x/tools/cmd/goimports
