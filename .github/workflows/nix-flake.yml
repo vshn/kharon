@@ -1,0 +1,35 @@
+name: "Flake.nix updater"
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+jobs:
+  bump-nix:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          ssh-key: ${{ secrets.BUMP_PKGBUILD_DEPLOY_KEY }}
+
+      - uses: cachix/install-nix-action@v27
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Bump Nix package version + hashes
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          nix-shell -p nix-update --run "nix-update --flake kharon --version=${version}"
+
+      - name: Bump flake.lock
+        run: |
+          nix flake update
+
+      - name: Commit and push
+        uses: stefanzweifel/git-auto-commit-action@v7
+        with:
+          commit_message: "Bump Nix package to ${{ github.ref_name }}"
+          file_pattern: default.nix
