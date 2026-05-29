@@ -14,12 +14,16 @@ type SSHConfigWithCache struct {
 	cache sync.Map
 }
 
+// NewSSHConfigWithCache creates a new SSHConfigWithCache with the given SSH configuration file.
+// The SSH configuration for each host will be cached after the first retrieval to improve performance on subsequent requests.
+// If configFile is empty, the default SSH configuration will be used.
 func NewSSHConfigWithCache(configFile string) *SSHConfigWithCache {
 	return &SSHConfigWithCache{
 		c: SSHConfig{ConfigFile: configFile},
 	}
 }
 
+// ConfigForHost returns the SSH configuration for the given host, using a cache to avoid redundant calls to "ssh -G" for the same host.
 func (s *SSHConfigWithCache) ConfigForHost(h string) (Config, error) {
 	value, _ := s.cache.LoadOrStore(h, sync.OnceValues(func() (Config, error) {
 		return s.c.ConfigForHost(h)
@@ -27,7 +31,10 @@ func (s *SSHConfigWithCache) ConfigForHost(h string) (Config, error) {
 	return value.(func() (Config, error))()
 }
 
+// SSHConfig represents the SSH configuration and provides a method to retrieve the configuration for a specific host.
+// It uses the "ssh -G" command to get the effective SSH configuration for a host, which takes into account all SSH configuration files and rules.
 type SSHConfig struct {
+	// ConfigFile is the path to the SSH configuration file to use. If empty, the default SSH configuration will be used.
 	ConfigFile string
 }
 

@@ -58,7 +58,7 @@ func (p *Proxy) Start(ctx context.Context, lp func() (net.Listener, error), mapp
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	sshDialer, err := NewRoutingDialer(sshconfig.NewSSHConfigWithCache(p.SSHConfigFile), p.DirectDialer, p.keepAliveInterval(), mappingFile)
+	sshDialer, err := NewRoutingDialer(p.SSHConfigFile, p.DirectDialer, p.keepAliveInterval(), mappingFile)
 	if err != nil {
 		return fmt.Errorf("failed to build SSH dialer: %w", err)
 	}
@@ -160,7 +160,7 @@ func (p *Proxy) Reload(mappingFile string) error {
 		return fmt.Errorf("proxy is not running")
 	}
 
-	newDialer, err := NewRoutingDialer(sshconfig.NewSSHConfigWithCache(p.SSHConfigFile), p.DirectDialer, p.keepAliveInterval(), mappingFile)
+	newDialer, err := NewRoutingDialer(p.SSHConfigFile, p.DirectDialer, p.keepAliveInterval(), mappingFile)
 	if err != nil {
 		return fmt.Errorf("failed to build new SSH dialer: %w", err)
 	}
@@ -238,11 +238,13 @@ type RoutingDialer struct {
 }
 
 // NewRoutingDialer creates a new RoutingDialer with the given SSH configuration, direct dialer, keep-alive interval, and hostname mapping file.
-func NewRoutingDialer(sshConfig *sshconfig.SSHConfigWithCache, direct net.Dialer, tunnelKeepAliveInterval time.Duration, mappingFile string) (*RoutingDialer, error) {
+func NewRoutingDialer(sshConfigFile string, direct net.Dialer, tunnelKeepAliveInterval time.Duration, mappingFile string) (*RoutingDialer, error) {
 	hostnameMapping, err := loadHostnameMapping(mappingFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load hostname mapping: %w", err)
 	}
+
+	sshConfig := sshconfig.NewSSHConfigWithCache(sshConfigFile)
 
 	// TODO(bastjan) This can in theory be different for different jumphosts, but let's assume it's the same for all of them for now.
 	// We can always add support for per-jumphost agent sockets later if needed.
