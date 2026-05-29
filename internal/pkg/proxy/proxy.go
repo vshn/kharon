@@ -639,19 +639,15 @@ func configForHost(sshConfig *sshconfig.SSHConfigWithCache, host string, agent a
 	username := conf.Get("User")
 	port := conf.Get("Port")
 	hostName := conf.Get("HostName")
-	if hostName == "" {
-		proxyCommand := conf.Get("ProxyCommand")
-		if proxyCommand != "" {
-			slog.Debug("Fallback to ProxyCommand for HostName", slog.String("host", host), slog.String("proxy_command", proxyCommand))
-			extractedHostName, _, _, err := parseProxyCommand(proxyCommand)
-			if err != nil {
-				return "", nil, fmt.Errorf("error parsing ProxyCommand for host %s: %w", host, err)
-			}
-			slog.Debug("Extracted HostName from ProxyCommand", slog.String("host", host), slog.String("host_name", extractedHostName))
-			hostName = extractedHostName
-		} else {
-			hostName = host
+	proxyCommand := conf.Get("ProxyCommand")
+	if proxyCommand != "" {
+		slog.Debug("Fallback to ProxyCommand for HostName", slog.String("host", host), slog.String("proxy_command", proxyCommand))
+		extractedHostName, _, _, err := parseProxyCommand(proxyCommand)
+		if err != nil {
+			return "", nil, fmt.Errorf("error parsing ProxyCommand for host %s: %w", host, err)
 		}
+		slog.Debug("Extracted HostName from ProxyCommand", slog.String("host", host), slog.String("host_name", extractedHostName))
+		hostName = extractedHostName
 	}
 	hostKeyAlias := conf.Get("HostKeyAlias")
 	if hostKeyAlias != "" {
