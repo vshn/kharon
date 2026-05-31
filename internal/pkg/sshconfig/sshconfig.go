@@ -4,9 +4,11 @@ import (
 	"bufio"
 	"bytes"
 	"io"
+	"log/slog"
 	"os/exec"
 	"strings"
 	"sync"
+	"time"
 )
 
 type SSHConfigWithCache struct {
@@ -40,6 +42,11 @@ type SSHConfig struct {
 
 // ConfigForHost returns the SSH configuration for the given host by invoking "ssh -G" and parsing its output.
 func (s SSHConfig) ConfigForHost(h string) (Config, error) {
+	start := time.Now()
+	defer func() {
+		slog.Debug("ConfigForHost", slog.String("host", h), slog.Duration("duration", time.Since(start)))
+	}()
+
 	args := []string{"-G", h}
 	if s.ConfigFile != "" {
 		args = append([]string{"-F", s.ConfigFile}, args...)
