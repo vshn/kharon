@@ -17,7 +17,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/kevinburke/ssh_config"
 	"go.uber.org/multierr"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
@@ -27,16 +26,15 @@ import (
 	"tailscale.com/net/socks5"
 
 	"github.com/vshn/kharon/internal/pkg/cache"
+	"github.com/vshn/kharon/internal/pkg/sshconfig"
 )
 
 const keepAliveRequestType = "keepalive@kharon"
 
 type Proxy struct {
-	// SSHConfig is the SSH config to use for determining jumphosts and SSH connection settings.
-	// If not set, the proxy uses ssh_config.DefaultUserSettings.
-	// The function is called on every Reload() and it should return a new instance of ssh_config.UserSettings each time.
-	// ssh_config.UserSettings has an internal cache and never reloads the config file after the first load.
-	SSHConfig func() *ssh_config.UserSettings
+	// SSHConfigFile is the path to the SSH config file to use for determining jumphosts and SSH connection settings.
+	// If not set, the proxy uses the default SSH config files.
+	SSHConfigFile string
 
 	// DirectDialer is the dialer to use for direct connections.
 	DirectDialer net.Dialer
@@ -60,7 +58,7 @@ func (p *Proxy) Start(ctx context.Context, lp func() (net.Listener, error), mapp
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	sshDialer, err := NewRoutingDialer(p.sshConfigOrEmpty(), p.DirectDialer, p.keepAliveInterval(), mappingFile)
+	sshDialer, err := NewRoutingDialer(p.SSHConfigFile, p.DirectDialer, p.keepAliveInterval(), mappingFile)
 	if err != nil {
 		return fmt.Errorf("failed to build SSH dialer: %w", err)
 	}
@@ -162,7 +160,7 @@ func (p *Proxy) Reload(mappingFile string) error {
 		return fmt.Errorf("proxy is not running")
 	}
 
-	newDialer, err := NewRoutingDialer(p.sshConfigOrEmpty(), p.DirectDialer, p.keepAliveInterval(), mappingFile)
+	newDialer, err := NewRoutingDialer(p.SSHConfigFile, p.DirectDialer, p.keepAliveInterval(), mappingFile)
 	if err != nil {
 		return fmt.Errorf("failed to build new SSH dialer: %w", err)
 	}
@@ -174,13 +172,6 @@ func (p *Proxy) Reload(mappingFile string) error {
 		// Just close the new dialer and keep the current one running.
 		return newDialer.Close()
 	}
-}
-
-func (p *Proxy) sshConfigOrEmpty() *ssh_config.UserSettings {
-	if p.SSHConfig != nil {
-		return p.SSHConfig()
-	}
-	return &ssh_config.UserSettings{}
 }
 
 // keepAliveInterval returns the keep-alive interval to use for SSH connections, defaulting to 3 seconds if not set.
@@ -240,31 +231,30 @@ type RoutingDialer struct {
 	agent           agent.ExtendedAgent
 	hostnameMapping []hostSuffixJumphostMapping
 
-	sshSettings *ssh_config.UserSettings
+	sshSettings *sshconfig.SSHConfigWithCache
 
 	directDialer      net.Dialer
 	keepAliveInterval time.Duration
 }
 
 // NewRoutingDialer creates a new RoutingDialer with the given SSH configuration, direct dialer, keep-alive interval, and hostname mapping file.
-func NewRoutingDialer(sshConfig *ssh_config.UserSettings, direct net.Dialer, tunnelKeepAliveInterval time.Duration, mappingFile string) (*RoutingDialer, error) {
+func NewRoutingDialer(sshConfigFile string, direct net.Dialer, tunnelKeepAliveInterval time.Duration, mappingFile string) (*RoutingDialer, error) {
 	hostnameMapping, err := loadHostnameMapping(mappingFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load hostname mapping: %w", err)
 	}
 
-	if sshConfig == nil {
-		sshConfig = &ssh_config.UserSettings{}
-	}
+	sshConfig := sshconfig.NewSSHConfigWithCache(sshConfigFile)
 
 	// TODO(bastjan) This can in theory be different for different jumphosts, but let's assume it's the same for all of them for now.
 	// We can always add support for per-jumphost agent sockets later if needed.
 	// It's just a random hostname that is very unlikely to be used in the SSH config,
 	// we should get the default value for IdentityAgent without accidentally picking up a real host's config.
-	agentSock, err := sshConfig.GetStrict("6372ffc2-9466-4e89-b60d-14307aa583a5.internal.kharon.vshn.io", "IdentityAgent")
+	agentConf, err := sshConfig.ConfigForHost("6372ffc2-9466-4e89-b60d-14307aa583a5.internal.kharon.vshn.io")
 	if err != nil {
 		return nil, fmt.Errorf("SSH_AUTH_SOCK is not a valid socket: %w", err)
 	}
+	agentSock := agentConf.Get("IdentityAgent")
 	if agentSock != "" {
 		rs, err := replaceTildeWithHome(agentSock)
 		if err != nil {
@@ -315,7 +305,7 @@ func (d *RoutingDialer) Close() error {
 type clientMgr struct {
 	Jumphost          string
 	Agent             agent.ExtendedAgent
-	SSHSettings       *ssh_config.UserSettings
+	SSHSettings       *sshconfig.SSHConfigWithCache
 	KeepAliveInterval time.Duration
 
 	// clientMux protects access to client and clientCleanup.
@@ -616,11 +606,13 @@ func dialDirectTarget(addr string, config *ssh.ClientConfig) (*ssh.Client, func(
 	return c, c.Close, nil
 }
 
-func configForHost(sshConfig *ssh_config.UserSettings, host string, agent agent.ExtendedAgent) (string, *ssh.ClientConfig, error) {
-	khfs, err := sshConfig.GetStrict(host, "UserKnownHostsFile")
+func configForHost(sshConfig *sshconfig.SSHConfigWithCache, host string, agent agent.ExtendedAgent) (string, *ssh.ClientConfig, error) {
+	conf, err := sshConfig.ConfigForHost(host)
 	if err != nil {
-		return "", nil, fmt.Errorf("error getting UserKnownHostsFile for host %s: %w", host, err)
+		return "", nil, fmt.Errorf("error getting SSH config for host %s: %w", host, err)
 	}
+
+	khfs := conf.Get("UserKnownHostsFile")
 	akhfs := make([]string, 0)
 	for khf := range strings.FieldsSeq(khfs) {
 		khf, err := replaceTildeWithHome(khf)
@@ -646,39 +638,20 @@ func configForHost(sshConfig *ssh_config.UserSettings, host string, agent agent.
 	if err != nil {
 		return "", nil, fmt.Errorf("error creating knownhosts callback for host %s: %w", host, err)
 	}
-	username, err := sshConfig.GetStrict(host, "User")
-	if err != nil {
-		return "", nil, fmt.Errorf("error getting User for host %s: %w", host, err)
-	}
-	port, err := sshConfig.GetStrict(host, "Port")
-	if err != nil {
-		return "", nil, fmt.Errorf("error getting Port for host %s: %w", host, err)
-	}
-	hostName, err := sshConfig.GetStrict(host, "HostName")
-	if err != nil {
-		return "", nil, fmt.Errorf("error getting HostName for host %s: %w", host, err)
-	}
-	if hostName == "" {
-		proxyCommand, err := sshConfig.GetStrict(host, "ProxyCommand")
+	username := conf.Get("User")
+	port := conf.Get("Port")
+	hostName := conf.Get("HostName")
+	proxyCommand := conf.Get("ProxyCommand")
+	if proxyCommand != "" {
+		slog.Debug("Fallback to ProxyCommand for HostName", slog.String("host", host), slog.String("proxy_command", proxyCommand))
+		extractedHostName, _, _, err := parseProxyCommand(proxyCommand)
 		if err != nil {
-			return "", nil, fmt.Errorf("error getting ProxyCommand for host %s: %w", host, err)
+			return "", nil, fmt.Errorf("error parsing ProxyCommand for host %s: %w", host, err)
 		}
-		if proxyCommand != "" {
-			slog.Debug("Fallback to ProxyCommand for HostName", slog.String("host", host), slog.String("proxy_command", proxyCommand))
-			extractedHostName, _, _, err := parseProxyCommand(proxyCommand)
-			if err != nil {
-				return "", nil, fmt.Errorf("error parsing ProxyCommand for host %s: %w", host, err)
-			}
-			slog.Debug("Extracted HostName from ProxyCommand", slog.String("host", host), slog.String("host_name", extractedHostName))
-			hostName = extractedHostName
-		} else {
-			hostName = host
-		}
+		slog.Debug("Extracted HostName from ProxyCommand", slog.String("host", host), slog.String("host_name", extractedHostName))
+		hostName = extractedHostName
 	}
-	hostKeyAlias, err := sshConfig.GetStrict(host, "HostKeyAlias")
-	if err != nil {
-		return "", nil, fmt.Errorf("error getting HostKeyAlias for host %s: %w", host, err)
-	}
+	hostKeyAlias := conf.Get("HostKeyAlias")
 	if hostKeyAlias != "" {
 		knownHostsWithoutMapping := knownHosts
 		knownHosts = func(hn string, remote net.Addr, key ssh.PublicKey) error {
@@ -701,19 +674,17 @@ func configForHost(sshConfig *ssh_config.UserSettings, host string, agent agent.
 	}, nil
 }
 
-func jumphostChainForTarget(conf *ssh_config.UserSettings, host string) ([]string, error) {
+func jumphostChainForTarget(conf *sshconfig.SSHConfigWithCache, host string) ([]string, error) {
 	chain := []string{host}
 
 	for {
-		jump, err := conf.GetStrict(host, "ProxyJump")
+		c, err := conf.ConfigForHost(host)
 		if err != nil {
-			return nil, fmt.Errorf("error getting ProxyJump for host %s: %w", host, err)
+			return nil, fmt.Errorf("error getting SSH config for host %s: %w", host, err)
 		}
+		jump := c.Get("ProxyJump")
 		if jump == "" {
-			pc, err := conf.GetStrict(host, "ProxyCommand")
-			if err != nil {
-				return nil, fmt.Errorf("error getting ProxyCommand for host %s: %w", host, err)
-			}
+			pc := c.Get("ProxyCommand")
 			if pc == "" {
 				break
 			}

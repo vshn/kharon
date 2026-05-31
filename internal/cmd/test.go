@@ -74,7 +74,7 @@ func runTest(cmd *cobra.Command, args []string) {
 		includePattern = args[0]
 	}
 
-	dialer, err := proxy.NewRoutingDialer(nil, net.Dialer{}, 0, proxyMappingFile)
+	dialer, err := proxy.NewRoutingDialer("", net.Dialer{}, 0, proxyMappingFile)
 	if err != nil {
 		slog.Error("Failed to create routing dialer", "error", err)
 		os.Exit(1)

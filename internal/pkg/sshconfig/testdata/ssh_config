@@ -1,0 +1,10 @@
+Host *
+  User user1
+  IdentityFile ~/.idglobal
+
+Host example.com
+  Port 2222
+  IdentityFile ~/.id1
+
+Match final all
+  Batchmode yes
