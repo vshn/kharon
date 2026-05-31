@@ -22,9 +22,9 @@ jobs:
           - runner: macos-26
             target: darwin-aarch64
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version-file: 'go.mod'
 
@@ -32,7 +32,7 @@ jobs:
         run: make build
 
       - name: Upload builds
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: kharon-${{ matrix.platform.target }}
           path: kharon
@@ -41,12 +41,12 @@ jobs:
     needs: build
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           fetch-depth: 0
 
       - name: Download builds
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           path: artifacts
 
@@ -70,7 +70,7 @@ jobs:
 
       - name: Build changelog from PRs with labels
         id: build_changelog
-        uses: mikepenz/release-changelog-builder-action@v6
+        uses: mikepenz/release-changelog-builder-action@348e88fab4c37338b1e803ceb2d4a7a5db6c0833 # v6
         with:
           configuration: ".github/changelog-configuration.json"
           # PreReleases still get a changelog, but the next full release gets a diff since the last full release,
@@ -84,7 +84,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create Release
-        uses: ncipollo/release-action@v1
+        uses: ncipollo/release-action@339a81892b84b4eeb0f6e744e4574d79d0d9b8dd # v1
         with:
           body: ${{steps.build_changelog.outputs.changelog}}
           # It is assumed that PreReleases have a '-' in their tag name, e.g. 'v1.0.0-alpha.1'.
@@ -100,7 +100,7 @@ jobs:
     if: ${{ !contains(github.ref, '-') }}
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           ref: main
           ssh-key: ${{ secrets.BUMP_PKGBUILD_DEPLOY_KEY }}
@@ -112,7 +112,7 @@ jobs:
           sed -i "s/^pkgrel=.*/pkgrel=1/" PKGBUILD
 
       - name: Commit and push
-        uses: stefanzweifel/git-auto-commit-action@v7
+        uses: stefanzweifel/git-auto-commit-action@04702edda442b2e678b25b537cec683a1493fcb9 # v7
         with:
           commit_message: "Bump PKGBUILD to ${{ github.ref_name }}"
           file_pattern: PKGBUILD
