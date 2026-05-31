@@ -23,106 +23,113 @@ const (
 	clusterId = "c-appuio-lab-cloudscale-rma-0"
 )
 
-func Test_EmergencyCredentials_NonInteractive(t *testing.T) {
+func Test_EmergencyCredentials(t *testing.T) {
 	if os.Getenv("WANT_E2E") == "" {
 		t.Skip("Set WANT_E2E=1 to run this test")
 	}
 
-	tmpDir := t.TempDir()
-	kubeconfigPath := filepath.Join(tmpDir, "kubeconfig")
-	key := mustEnv(t, "E2E_PASSBOLT_PRIVATE_KEY")
-	passphrase := mustEnv(t, "E2E_PASSBOLT_PASSPHRASE")
-	totp := mustEnv(t, "E2E_PASSBOLT_TOTP_KEY_BASE32")
+	exe := mustBuildKharon(t)
 
-	kharonCmd := exec.CommandContext(t.Context(), "go", "run", "..", "emergency-credentials", "-v", "-100", "--proxy-addr", "", "--inventory-file", "testdata/inventory.json", clusterId)
-	kharonCmd.Env = append(os.Environ(),
-		"KHARON_PASSBOLT_KEY="+key,
-		"KHARON_PASSBOLT_PASSPHRASE="+passphrase,
-		"KHARON_PASSBOLT_TOTP="+mustGenerateTOTPCode(t, totp),
-		"KUBECONFIG="+kubeconfigPath,
-	)
-	kharonCmd.Stdout = t.Output()
-	kharonCmd.Stderr = t.Output()
+	t.Run("non-interactive", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		kubeconfigPath := filepath.Join(tmpDir, "kubeconfig")
+		key := mustEnv(t, "E2E_PASSBOLT_PRIVATE_KEY")
+		passphrase := mustEnv(t, "E2E_PASSBOLT_PASSPHRASE")
+		totp := mustEnv(t, "E2E_PASSBOLT_TOTP_KEY_BASE32")
 
-	require.NoError(t, kharonCmd.Run(), "Emergency credentials command failed")
+		kharonCmd := exec.CommandContext(t.Context(), exe, "emergency-credentials", "-v", "-100", "--proxy-addr", "", "--inventory-file", "testdata/inventory.json", clusterId)
+		kharonCmd.Env = append(os.Environ(),
+			"KHARON_PASSBOLT_KEY="+key,
+			"KHARON_PASSBOLT_PASSPHRASE="+passphrase,
+			"KHARON_PASSBOLT_TOTP="+mustGenerateTOTPCode(t, totp),
+			"KUBECONFIG="+kubeconfigPath,
+		)
+		kharonCmd.Stdout = t.Output()
+		kharonCmd.Stderr = t.Output()
 
-	mustHavePassboltKeyWritten(t)
+		require.NoError(t, kharonCmd.Run(), "Emergency credentials command failed")
 
-	mustHaveNodeDeletePermissions(t, kubeconfigPath)
-}
+		mustHavePassboltKeyWritten(t)
 
-func Test_EmergencyCredentials_WithLegacyConfig(t *testing.T) {
-	if os.Getenv("WANT_E2E") == "" {
-		t.Skip("Set WANT_E2E=1 to run this test")
-	}
-
-	tmpDir := t.TempDir()
-	kubeconfigPath := filepath.Join(tmpDir, "kubeconfig")
-	key := mustEnv(t, "E2E_PASSBOLT_PRIVATE_KEY")
-	passphrase := mustEnv(t, "E2E_PASSBOLT_PASSPHRASE")
-	totp := mustEnv(t, "E2E_PASSBOLT_TOTP_KEY_BASE32")
-
-	legacyConfigJson, err := json.Marshal(map[string]string{"passbolt_key": key})
-	require.NoError(t, err, "Failed to marshal legacy config")
-
-	legacyConfigPath := filepath.Join(tmpDir, "config.yaml")
-	require.NoError(t, os.WriteFile(legacyConfigPath, legacyConfigJson, 0600), "Failed to write legacy config file")
-
-	kharonCmd := exec.CommandContext(t.Context(), "go", "run", "..", "emergency-credentials", "-v", "-100", "--proxy-addr", "", "--inventory-file", "testdata/inventory.json", clusterId)
-	kharonCmd.Env = append(os.Environ(),
-		"EMR_CONFIG_DIR="+tmpDir,
-		"KHARON_PASSBOLT_PASSPHRASE="+passphrase,
-		"KHARON_PASSBOLT_TOTP="+mustGenerateTOTPCode(t, totp),
-		"KUBECONFIG="+kubeconfigPath,
-	)
-	kharonCmd.Stdout = t.Output()
-	kharonCmd.Stderr = t.Output()
-
-	require.NoError(t, kharonCmd.Run(), "Emergency credentials command failed")
-
-	mustHavePassboltKeyWritten(t)
-
-	mustHaveNodeDeletePermissions(t, kubeconfigPath)
-}
-
-func Test_EmergencyCredentials_Interactive(t *testing.T) {
-	if os.Getenv("WANT_E2E") == "" {
-		t.Skip("Set WANT_E2E=1 to run this test")
-	}
-
-	tmpDir := t.TempDir()
-	kubeconfigPath := filepath.Join(tmpDir, "kubeconfig")
-	key := mustEnv(t, "E2E_PASSBOLT_PRIVATE_KEY")
-	passphrase := mustEnv(t, "E2E_PASSBOLT_PASSPHRASE")
-	totp := mustEnv(t, "E2E_PASSBOLT_TOTP_KEY_BASE32")
-
-	kharonCmd := exec.CommandContext(t.Context(), "go", "run", "..", "emergency-credentials", "-v", "-100", "--proxy-addr", "", "--inventory-file", "testdata/inventory.json", clusterId)
-	kharonCmd.Env = append(os.Environ(),
-		"KHARON_PASSBOLT_KEY=",
-		"KHARON_PASSBOLT_PASSPHRASE=",
-		"KHARON_PASSBOLT_TOTP=",
-		"KUBECONFIG="+kubeconfigPath,
-	)
-	pty, err := pty.Start(kharonCmd)
-	require.NoError(t, err, "Failed to setup pty for kharon command")
-	var out bytes.Buffer
-	var wg sync.WaitGroup
-	wg.Go(func() {
-		defer pty.Close()
-		io.Copy(&out, pty)
+		mustHaveNodeDeletePermissions(t, kubeconfigPath)
 	})
 
-	sendToPrompt(t, pty, &out, "Please paste the passbolt key", func() string { return key + "\n\x04" })
+	t.Run("interactive", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		kubeconfigPath := filepath.Join(tmpDir, "kubeconfig")
+		key := mustEnv(t, "E2E_PASSBOLT_PRIVATE_KEY")
+		passphrase := mustEnv(t, "E2E_PASSBOLT_PASSPHRASE")
+		totp := mustEnv(t, "E2E_PASSBOLT_TOTP_KEY_BASE32")
 
-	sendToPrompt(t, pty, &out, "Please enter your Passbolt passphrase", func() string { return passphrase + "\n" })
+		kharonCmd := exec.CommandContext(t.Context(), exe, "emergency-credentials", "-v", "-100", "--proxy-addr", "", "--inventory-file", "testdata/inventory.json", clusterId)
+		kharonCmd.Env = append(os.Environ(),
+			"KHARON_PASSBOLT_KEY=",
+			"KHARON_PASSBOLT_PASSPHRASE=",
+			"KHARON_PASSBOLT_TOTP=",
+			"KUBECONFIG="+kubeconfigPath,
+		)
+		pty, err := pty.Start(kharonCmd)
+		require.NoError(t, err, "Failed to setup pty for kharon command")
+		var out bytes.Buffer
+		var wg sync.WaitGroup
+		wg.Go(func() {
+			defer pty.Close()
+			io.Copy(&out, pty)
+		})
 
-	sendToPrompt(t, pty, &out, "Please enter the Passbolt TOTP code", func() string { return mustGenerateTOTPCode(t, totp) + "\n" })
+		sendToPrompt(t, pty, &out, "Please paste the passbolt key", func() string { return key + "\n\x04" })
 
-	wg.Wait()
+		sendToPrompt(t, pty, &out, "Please enter your Passbolt passphrase", func() string { return passphrase + "\n" })
 
-	mustHavePassboltKeyWritten(t)
+		sendToPrompt(t, pty, &out, "Please enter the Passbolt TOTP code", func() string { return mustGenerateTOTPCode(t, totp) + "\n" })
 
-	mustHaveNodeDeletePermissions(t, kubeconfigPath)
+		wg.Wait()
+
+		mustHavePassboltKeyWritten(t)
+
+		mustHaveNodeDeletePermissions(t, kubeconfigPath)
+	})
+
+	t.Run("with legacy config", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		kubeconfigPath := filepath.Join(tmpDir, "kubeconfig")
+		key := mustEnv(t, "E2E_PASSBOLT_PRIVATE_KEY")
+		passphrase := mustEnv(t, "E2E_PASSBOLT_PASSPHRASE")
+		totp := mustEnv(t, "E2E_PASSBOLT_TOTP_KEY_BASE32")
+
+		legacyConfigJson, err := json.Marshal(map[string]string{"passbolt_key": key})
+		require.NoError(t, err, "Failed to marshal legacy config")
+
+		legacyConfigPath := filepath.Join(tmpDir, "config.yaml")
+		require.NoError(t, os.WriteFile(legacyConfigPath, legacyConfigJson, 0600), "Failed to write legacy config file")
+
+		kharonCmd := exec.CommandContext(t.Context(), exe, "emergency-credentials", "-v", "-100", "--proxy-addr", "", "--inventory-file", "testdata/inventory.json", clusterId)
+		kharonCmd.Env = append(os.Environ(),
+			"EMR_CONFIG_DIR="+tmpDir,
+			"KHARON_PASSBOLT_PASSPHRASE="+passphrase,
+			"KHARON_PASSBOLT_TOTP="+mustGenerateTOTPCode(t, totp),
+			"KUBECONFIG="+kubeconfigPath,
+		)
+		kharonCmd.Stdout = t.Output()
+		kharonCmd.Stderr = t.Output()
+
+		require.NoError(t, kharonCmd.Run(), "Emergency credentials command failed")
+
+		mustHavePassboltKeyWritten(t)
+
+		mustHaveNodeDeletePermissions(t, kubeconfigPath)
+	})
+}
+
+func mustBuildKharon(t *testing.T) string {
+	t.Helper()
+
+	exe := filepath.Join(t.TempDir(), "kharon")
+	buildCmd := exec.CommandContext(t.Context(), "go", "build", "-o", exe, "..")
+	buildCmd.Stdout = t.Output()
+	buildCmd.Stderr = t.Output()
+	require.NoError(t, buildCmd.Run(), "Failed to build kharon binary")
+	return exe
 }
 
 func sendToPrompt(t *testing.T, pty *os.File, out *bytes.Buffer, prompt string, response func() string) {
