@@ -1,5 +1,7 @@
 name: Lint
 
+permissions: {}
+
 on:
   pull_request:
     branches:
