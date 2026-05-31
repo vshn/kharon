@@ -1,5 +1,9 @@
 name: Release
 
+permissions:
+  contents: write # For creating releases and uploading artifacts
+  pull-requests: read # For building changelog from PRs with labels
+
 on:
   push:
     tags:

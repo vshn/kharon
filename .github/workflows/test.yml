@@ -1,5 +1,7 @@
 name: Test
 
+permissions: {}
+
 on:
   pull_request:
     branches:
