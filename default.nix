@@ -1,7 +1,7 @@
 {pkgs ? import <nixpkgs> {}}:
 pkgs.buildGoLatestModule {
   pname = "kharon";
-  version = "1.6.1-dev2";
+  version = "1.6.0";
 
   src = pkgs.lib.cleanSource ./.;
 
