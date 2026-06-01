@@ -118,7 +118,7 @@ jobs:
           file_pattern: PKGBUILD
 
   bump-nix:
-    needs: bump-pkgbuild
+    needs: publish
     # if: ${{ !contains(github.ref, '-') }}
     runs-on: ubuntu-24.04
     steps:
