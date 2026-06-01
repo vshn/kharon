@@ -119,12 +119,12 @@ jobs:
 
   bump-nix:
     needs: bump-pkgbuild
-    if: ${{ !contains(github.ref, '-') }}
+    # if: ${{ !contains(github.ref, '-') }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
-          ref: main
+          ref: add/nix-flake
           ssh-key: ${{ secrets.BUMP_PKGBUILD_DEPLOY_KEY }}
 
       - uses: cachix/install-nix-action@8aa03977d8d733052d78f4e008a241fd1dbf36b3 # v31.10.6
