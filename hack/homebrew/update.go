@@ -13,19 +13,19 @@ var caskTemplate string
 
 func main() {
 	if len(os.Args) < 3 {
-		fmt.Printf("Usage: %s <version> <checksum.txt>\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "Usage: %s <version> <checksum.txt>\n", os.Args[0])
 		os.Exit(1)
 	}
 
 	t, err := template.New("kharon.rb").Parse(caskTemplate)
 	if err != nil {
-		fmt.Printf("Error parsing template: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error parsing template: %v\n", err)
 		os.Exit(1)
 	}
 
 	checkums, err := parseChecksums(os.Args[2])
 	if err != nil {
-		fmt.Printf("Error parsing checksums: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error parsing checksums: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -35,7 +35,7 @@ func main() {
 		"sha256_x86_64_linux": mustFind(checkums, "kharon-linux-x86_64"),
 		"sha256_arm64_linux":  mustFind(checkums, "kharon-linux-aarch64"),
 	}); err != nil {
-		fmt.Printf("Error executing template: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error executing template: %v\n", err)
 		os.Exit(1)
 	}
 }
@@ -43,7 +43,7 @@ func main() {
 func mustFind(m map[string]string, key string) string {
 	value, ok := m[key]
 	if !ok {
-		fmt.Printf("Checksum for %s not found. Checksums: %v\n", key, m)
+		fmt.Fprintf(os.Stderr, "Checksum for %s not found. Checksums: %v\n", key, m)
 		os.Exit(1)
 	}
 	return value

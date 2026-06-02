@@ -150,6 +150,7 @@ jobs:
 
       - name: Update Cask version and checksums
         run: |
+          ls -l dist
           go run ./hack/homebrew "${{ github.ref_name }}" dist/checksums.txt > homebrew-tap/Casks/kharon.rb
 
       - name: Commit and push
