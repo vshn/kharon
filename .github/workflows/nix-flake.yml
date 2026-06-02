@@ -4,6 +4,10 @@ on:
   push:
     branches:
       - main
+    paths:
+      - "go.mod"
+      - "go.sum"
+
 jobs:
   bump-nix:
     runs-on: ubuntu-24.04
