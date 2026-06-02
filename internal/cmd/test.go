@@ -9,8 +9,8 @@ import (
 	"text/tabwriter"
 
 	"github.com/fatih/color"
-	"github.com/minio/pkg/v3/wildcard"
 	"github.com/spf13/cobra"
+	"k8s.io/apimachinery/pkg/labels"
 
 	"github.com/vshn/kharon/internal/pkg/cache"
 	"github.com/vshn/kharon/internal/pkg/completion"
@@ -34,26 +34,25 @@ kharon test 'c-prod-*'
 # Exclude all patterns ending with -poc? or -dev?
 kharon test --exclude-cluster='*-poc?' --exclude-cluster='*-dev?'`
 
-var testExcludesClusters []string
-
 func init() {
 	RootCmd.AddCommand(testCmd)
 
 	flag := testCmd.Flags()
 	flag.StringVar(&clustersInventoryFile, "inventory-file", inventoryFilePath(), "Path to the inventory file that should be used by this command.")
 	flag.StringVar(&proxyMappingFile, "mapping-file", proxyMappingFilePath(), "Path to the domain to jumphost mapping file. This file can be generated with the `update` subcommand.")
-	flag.StringArrayVar(&testExcludesClusters, "exclude-cluster", []string{}, "Exclude clusters matching the pattern (supports wildcards, e.g. `--exclude-cluster=c-dev-*` to exclude all clusters starting with `c-dev-`).")
+	flag.StringArrayVar(&clustersExcludePatterns, "exclude-cluster", nil, "Exclude clusters matching the given wildcard pattern. Can be specified multiple times to exclude multiple patterns.")
+	flag.Func("fact-selector", "Label selector to filter clusters based on their facts. Example: 'distribution=openshift4,release_channel=fast'", selectorFlagFunc(&clustersFactSelector))
+	flag.Func("dynamic-fact-selector", "Label selector to filter clusters based on their dynamic facts. Example: 'distribution=openshift4,release_channel=fast'", selectorFlagFunc(&clustersDynamicFactSelector))
 	must(testCmd.RegisterFlagCompletionFunc("exclude-cluster", completion.ClusterID(clustersInventoryFile, true, nil)))
 }
 
 var testCmd = &cobra.Command{
-	Use:     "test [flags] [c-pattern-*] [--exclude-cluster=pattern]",
+	Use:     "test [flags] [c-pattern-* ...] [--exclude-cluster=pattern]",
 	Short:   "Test cluster connections.",
 	Long:    testCmdLongDesc,
 	Example: testCmdExample,
 	Run:     runTest,
-	Args:    cobra.MaximumNArgs(1),
-	ValidArgsFunction: completion.ClusterID(clustersInventoryFile, true, func(cluster lieutenant.Cluster) bool {
+	ValidArgsFunction: completion.ClusterID(clustersInventoryFile, false, func(cluster lieutenant.Cluster) bool {
 		api, _, _ := cluster.DynamicStringFact(lieutenant.KnownDynamicFactOpenshiftApiURL)
 		return api != ""
 	}),
@@ -69,11 +68,6 @@ func runTest(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	includePattern := ""
-	if len(args) > 0 {
-		includePattern = args[0]
-	}
-
 	dialer, err := proxy.NewRoutingDialer("", net.Dialer{}, 0, proxyMappingFile)
 	if err != nil {
 		slog.Error("Failed to create routing dialer", "error", err)
@@ -86,36 +80,19 @@ func runTest(cmd *cobra.Command, args []string) {
 		slog.Error("Failed to read inventory file. You might need to run the `update` command first.", "error", err)
 		os.Exit(1)
 	}
-	if includePattern != "" {
-		filtered := make([]lieutenant.Cluster, 0, len(clusters))
-		for _, cluster := range clusters {
-			if wildcard.Match(includePattern, cluster.ID) {
-				filtered = append(filtered, cluster)
-			}
-		}
-		clusters = filtered
-	}
-	if len(testExcludesClusters) > 0 {
-		filtered := make([]lieutenant.Cluster, 0, len(clusters))
-		for _, cluster := range clusters {
-			exclude := false
-			for _, pattern := range testExcludesClusters {
-				if wildcard.Match(pattern, cluster.ID) {
-					exclude = true
-					break
-				}
-			}
-			if !exclude {
-				filtered = append(filtered, cluster)
-			}
-		}
-		clusters = filtered
-	}
+
+	filteredClusters := lieutenant.Filter(clusters,
+		args,
+		clustersExcludePatterns,
+		labels.Everything().Add(clustersFactSelector...),
+		labels.Everything().Add(clustersDynamicFactSelector...),
+		nil,
+	)
 
 	bold := color.New(color.Bold)
 
 	var hasErrors bool
-	for report := range conntest.TestClusters(dialer, clusters) {
+	for report := range conntest.TestClusters(dialer, filteredClusters) {
 		if report.Skipped() {
 			fmt.Printf("%s\nSKIPPED  %s\n\n", bold.Sprint(report.ClusterName), report.SkippedReason)
 			continue
