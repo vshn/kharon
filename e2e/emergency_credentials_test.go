@@ -129,6 +129,12 @@ func mustBuildKharon(t *testing.T) string {
 	buildCmd.Stdout = t.Output()
 	buildCmd.Stderr = t.Output()
 	require.NoError(t, buildCmd.Run(), "Failed to build kharon binary")
+
+	firstExec := exec.CommandContext(t.Context(), exe, "version")
+	firstExec.Stdout = t.Output()
+	firstExec.Stderr = t.Output()
+	require.NoError(t, firstExec.Run(), "Failed to execute kharon binary after build")
+
 	return exe
 }
 
