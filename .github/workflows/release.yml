@@ -103,7 +103,7 @@ jobs:
   bump-pkgbuild:
     needs: publish
     # Skip PreReleases (tags containing '-', e.g. 'v1.0.0-alpha.1').
-    # if: ${{ !contains(github.ref, '-') }}
+    if: ${{ !contains(github.ref, '-') }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -126,7 +126,7 @@ jobs:
   bump-cask:
     needs: publish
     # Skip PreReleases (tags containing '-', e.g. 'v1.0.0-alpha.1').
-    if: ${{ !contains(github.ref, '-') }}
+    # if: ${{ !contains(github.ref, '-') }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
