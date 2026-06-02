@@ -37,7 +37,8 @@ var stdin = io.Reader(os.Stdin)
 // InstallLaunchdService installs the kharon launchd service with on-demand activation.
 // Prompts the user for confirmation before installing or overwriting the service file.
 // The service file will be created in the user's home directory under ~/Library/LaunchAgents.
-func InstallLaunchdService() error {
+// If yes is true, the user will not be prompted and the service will be installed or overwritten without confirmation.
+func InstallLaunchdService(yes bool) error {
 	home, err := userHomeFunc()
 	if err != nil {
 		return fmt.Errorf("failed to get user home directory: %w", err)
@@ -59,7 +60,7 @@ func InstallLaunchdService() error {
 	if exists {
 		installAction = "Overwrite existing launchd service at"
 	}
-	if !proceedPrompt(fmt.Sprintf("%s %s?", installAction, color.CyanString(launchdServiceFilePath))) {
+	if !yes && !proceedPrompt(fmt.Sprintf("%s %s?", installAction, color.CyanString(launchdServiceFilePath))) {
 		fmt.Println("Installation cancelled.")
 		return nil
 	}
@@ -90,7 +91,8 @@ func InstallLaunchdService() error {
 // InstallSystemdService installs the kharon systemd service and socket with on-demand activation.
 // Prompts the user for confirmation before installing or overwriting the service and socket files.
 // The service and socket files will be created in the user's home directory under ~/.config/systemd/user.
-func InstallSystemdService() error {
+// If yes is true, the user will not be prompted and the service and socket will be installed or overwritten without confirmation.
+func InstallSystemdService(yes bool) error {
 	home, err := userHomeFunc()
 	if err != nil {
 		return fmt.Errorf("failed to get user home directory: %w", err)
@@ -120,7 +122,7 @@ func InstallSystemdService() error {
 		if exists {
 			installAction = "Overwrite existing systemd unit at"
 		}
-		if !proceedPrompt(fmt.Sprintf("%s %s?", installAction, color.CyanString(unit.path))) {
+		if !yes && !proceedPrompt(fmt.Sprintf("%s %s?", installAction, color.CyanString(unit.path))) {
 			fmt.Println("Installation cancelled.")
 			return nil
 		}
