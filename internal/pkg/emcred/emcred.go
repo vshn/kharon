@@ -225,13 +225,11 @@ func mfaCallback(callback func() (string, error)) func(ctx context.Context, c *a
 			return http.Cookie{}, fmt.Errorf("TOTP token is required")
 		}
 
-		fmt.Println("Verifying MFA challenge...", code)
-
-		raw, apiRes, err := c.DoCustomRequestAndReturnRawResponse(ctx, "POST", "mfa/verify/totp.json", "v2", api.MFAChallengeResponse{
+		raw, apiRes, err := c.DoCustomRequestAndReturnRawResponseV5(ctx, "POST", "mfa/verify/totp.json", api.MFAChallengeResponse{
 			TOTP: code,
 		}, nil)
 		if err != nil {
-			return http.Cookie{}, fmt.Errorf("error verifying MFA challenge: %w (api response: %+v, code: %d)", err, apiRes, raw.StatusCode)
+			return http.Cookie{}, fmt.Errorf("error verifying MFA challenge: %w (api response: {%+v, %s}, code: %d)", err, apiRes.Header, apiRes.Body, raw.StatusCode)
 		}
 		// MFA worked so lets find the cookie and return it
 		cookieNames := make([]string, 0, len(raw.Cookies()))
