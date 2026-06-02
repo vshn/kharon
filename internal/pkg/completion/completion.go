@@ -13,9 +13,9 @@ import (
 
 // ClusterID returns a cobra.CompletionFunc that provides cluster IDs from the inventory file as suggestions.
 // The suggestions are filtered by the provided filter function and the current input prefix.
-func ClusterID(clustersInventoryFile string, filter func(lieutenant.Cluster) bool) cobra.CompletionFunc {
+func ClusterID(clustersInventoryFile string, stopAfterFirst bool, filter func(lieutenant.Cluster) bool) cobra.CompletionFunc {
 	return func(_ *cobra.Command, args []string, cur string) ([]string, cobra.ShellCompDirective) {
-		if len(args) > 0 {
+		if stopAfterFirst && len(args) > 0 {
 			return nil, cobra.ShellCompDirectiveNoFileComp
 		}
 

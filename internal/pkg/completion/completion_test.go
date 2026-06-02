@@ -14,14 +14,25 @@ import (
 )
 
 func Test_ClusterID(t *testing.T) {
-	t.Run("Returns no suggestions when positional args are present", func(t *testing.T) {
+	t.Run("Returns no suggestions when positional args are present and stopAfterFirst is set", func(t *testing.T) {
 		inventoryFile := filepath.Join(t.TempDir(), "inventory.json")
 		require.NoError(t, cache.WriteInventoryFile(inventoryFile, []lieutenant.Cluster{{ID: "c-test-1"}}))
 
-		subject := completion.ClusterID(inventoryFile, nil)
+		subject := completion.ClusterID(inventoryFile, true, nil)
 
 		suggestions, directive := subject(nil, []string{"already-present"}, "c")
 		assert.Len(t, suggestions, 0)
+		assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+	})
+
+	t.Run("Returns further suggestions when stopAfterFirst is not set", func(t *testing.T) {
+		inventoryFile := filepath.Join(t.TempDir(), "inventory.json")
+		require.NoError(t, cache.WriteInventoryFile(inventoryFile, []lieutenant.Cluster{{ID: "c-test-1"}}))
+
+		subject := completion.ClusterID(inventoryFile, false, nil)
+
+		suggestions, directive := subject(nil, []string{"already-present"}, "c")
+		assert.Len(t, suggestions, 1)
 		assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
 	})
 
@@ -35,7 +46,7 @@ func Test_ClusterID(t *testing.T) {
 			{ID: "c-beta"},
 		}))
 
-		subject := completion.ClusterID(inventoryFile, func(cluster lieutenant.Cluster) bool {
+		subject := completion.ClusterID(inventoryFile, false, func(cluster lieutenant.Cluster) bool {
 			return cluster.ID != "c-beta"
 		})
 
@@ -45,7 +56,7 @@ func Test_ClusterID(t *testing.T) {
 	})
 
 	t.Run("Returns error directive when inventory file cannot be read", func(t *testing.T) {
-		subject := completion.ClusterID(filepath.Join(t.TempDir(), "missing.json"), nil)
+		subject := completion.ClusterID(filepath.Join(t.TempDir(), "missing.json"), false, nil)
 
 		suggestions, directive := subject(nil, nil, "")
 		assert.Len(t, suggestions, 0)

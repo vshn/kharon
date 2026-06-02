@@ -82,11 +82,11 @@ func Test_RunShell(t *testing.T) {
 		},
 		{
 			name: "defaults to login shell",
-			args: []string{"c-cluster"},
+			args: []string{"c-inventory-1"},
 
 			expectedStdout: "stubsh --login",
 
-			expectedCurrentContext: "c-cluster",
+			expectedCurrentContext: "c-inventory-1",
 		},
 		{
 			name: "passes arguments to shell",
@@ -96,11 +96,11 @@ func Test_RunShell(t *testing.T) {
 		},
 		{
 			name: "passes arguments to shell",
-			args: []string{"c-cluster", "--", "-c", "hello"},
+			args: []string{"c-inventory-1", "--", "-c", "hello"},
 
 			expectedStdout: "stubsh -c hello",
 
-			expectedCurrentContext: "c-cluster",
+			expectedCurrentContext: "c-inventory-1",
 		},
 		{
 			name: "uses provided command instead of shell",
@@ -110,19 +110,19 @@ func Test_RunShell(t *testing.T) {
 		},
 		{
 			name: "uses provided command instead of shell",
-			args: []string{"--command", "cluster1", "tool1"},
+			args: []string{"--command", "c-inventory-1", "--", "tool1"},
 
 			expectedStdout: "tool1",
 
-			expectedCurrentContext: "cluster1",
+			expectedCurrentContext: "c-inventory-1",
 		},
 		{
 			name: "uses provided command instead of shell",
-			args: []string{"--command", "cluster1", "--", "tool1", "--option", "value"},
+			args: []string{"--command", "c-inventory-1", "--", "tool1", "--option", "value"},
 
 			expectedStdout: "tool1 --option value",
 
-			expectedCurrentContext: "cluster1",
+			expectedCurrentContext: "c-inventory-1",
 		},
 		{
 			name: "command provided with --command flag but no command",
@@ -181,6 +181,12 @@ oh no`,
 			args: []string{"--each", "--dynamic-fact-selector", "huh=ugh", "--", "sh", "-c", "exit 0"},
 
 			expectedStdout: `--- # c-other-cluster`,
+		}, {
+			name: "multiple include patterns",
+
+			args: []string{"c-inventory-1", "c-other-cluster", "--each", "--", "sh", "-c", "exit 0"},
+
+			expectedStdout: "--- # c-inventory-1\n\n--- # c-other-cluster",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

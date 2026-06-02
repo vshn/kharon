@@ -11,6 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 
 	"github.com/vshn/kharon/internal/pkg/cache"
+	"github.com/vshn/kharon/internal/pkg/completion"
 	"github.com/vshn/kharon/internal/pkg/lieutenant"
 )
 
@@ -30,13 +31,18 @@ func init() {
 	flag.Func("dynamic-fact-selector", "Label selector to filter clusters based on their dynamic facts. Example: 'distribution=openshift4,release_channel=fast'", selectorFlagFunc(&clustersDynamicFactSelector))
 	flag.VarP(&clustersOutputValue{val: &clustersOutputFormat}, "output", "o", "Output format. One of: table, json.")
 	must(clustersCmd.RegisterFlagCompletionFunc("output", cobra.FixedCompletions([]string{"table", "json"}, cobra.ShellCompDirectiveNoFileComp)))
+	must(clustersCmd.RegisterFlagCompletionFunc("exclude-cluster", completion.ClusterID(clustersInventoryFile, true, nil)))
 }
 
 var clustersCmd = &cobra.Command{
-	Use:   "clusters [c-cluster-id | c-pattern-*]",
+	Use:   "clusters [c-cluster-id | c-pattern-* ...]",
 	Short: "List clusters and their details.",
 	Long:  "List clusters and their details. Works on the inventory downloaded by the `update` command, so it does not require access to the Lieutenant API.",
 	RunE:  runClusters,
+	ValidArgsFunction: completion.ClusterID(clustersInventoryFile, false, func(cluster lieutenant.Cluster) bool {
+		api, _, _ := cluster.DynamicStringFact(lieutenant.KnownDynamicFactOpenshiftApiURL)
+		return api != ""
+	}),
 }
 
 func runClusters(cmd *cobra.Command, args []string) error {
@@ -49,13 +55,8 @@ func runClusters(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to read inventory file. You might need to run the `update` command first: %w", err)
 	}
 
-	var includePattern []string
-	if len(args) > 0 {
-		includePattern = []string{args[0]}
-	}
-
 	filteredClusters := lieutenant.Filter(clusters,
-		includePattern,
+		args,
 		clustersExcludePatterns,
 		labels.Everything().Add(clustersFactSelector...),
 		labels.Everything().Add(clustersDynamicFactSelector...),
