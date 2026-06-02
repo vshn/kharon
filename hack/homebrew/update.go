@@ -4,8 +4,8 @@ import (
 	"bytes"
 	_ "embed"
 	"fmt"
-	"html/template"
 	"os"
+	"text/template"
 )
 
 //go:embed kharon.rb
@@ -23,7 +23,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	checkums, err := parseChecksums(os.Args[2])
+	checksums, err := parseChecksums(os.Args[2])
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error parsing checksums: %v\n", err)
 		os.Exit(1)
@@ -31,9 +31,9 @@ func main() {
 
 	if err := t.Execute(os.Stdout, map[string]string{
 		"version":             os.Args[1],
-		"sha256_arm":          mustFind(checkums, "kharon-darwin-aarch64"),
-		"sha256_x86_64_linux": mustFind(checkums, "kharon-linux-x86_64"),
-		"sha256_arm64_linux":  mustFind(checkums, "kharon-linux-aarch64"),
+		"sha256_arm":          mustFind(checksums, "kharon-darwin-aarch64"),
+		"sha256_x86_64_linux": mustFind(checksums, "kharon-linux-x86_64"),
+		"sha256_arm64_linux":  mustFind(checksums, "kharon-linux-aarch64"),
 	}); err != nil {
 		fmt.Fprintf(os.Stderr, "Error executing template: %v\n", err)
 		os.Exit(1)
