@@ -43,7 +43,7 @@ var kubeconfigCmd = &cobra.Command{
 	Example: kubeconfigCmdExample,
 	Run:     runKubeconfig,
 	Args:    cobra.MaximumNArgs(1),
-	ValidArgsFunction: completion.ClusterID(clustersInventoryFile, func(cluster lieutenant.Cluster) bool {
+	ValidArgsFunction: completion.ClusterID(clustersInventoryFile, true, func(cluster lieutenant.Cluster) bool {
 		api, _, _ := cluster.DynamicStringFact(lieutenant.KnownDynamicFactOpenshiftApiURL)
 		return api != ""
 	}),

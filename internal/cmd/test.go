@@ -43,7 +43,7 @@ func init() {
 	flag.StringVar(&clustersInventoryFile, "inventory-file", inventoryFilePath(), "Path to the inventory file that should be used by this command.")
 	flag.StringVar(&proxyMappingFile, "mapping-file", proxyMappingFilePath(), "Path to the domain to jumphost mapping file. This file can be generated with the `update` subcommand.")
 	flag.StringArrayVar(&testExcludesClusters, "exclude-cluster", []string{}, "Exclude clusters matching the pattern (supports wildcards, e.g. `--exclude-cluster=c-dev-*` to exclude all clusters starting with `c-dev-`).")
-	must(testCmd.RegisterFlagCompletionFunc("exclude-cluster", completion.ClusterID(clustersInventoryFile, nil)))
+	must(testCmd.RegisterFlagCompletionFunc("exclude-cluster", completion.ClusterID(clustersInventoryFile, true, nil)))
 }
 
 var testCmd = &cobra.Command{
@@ -53,7 +53,7 @@ var testCmd = &cobra.Command{
 	Example: testCmdExample,
 	Run:     runTest,
 	Args:    cobra.MaximumNArgs(1),
-	ValidArgsFunction: completion.ClusterID(clustersInventoryFile, func(cluster lieutenant.Cluster) bool {
+	ValidArgsFunction: completion.ClusterID(clustersInventoryFile, true, func(cluster lieutenant.Cluster) bool {
 		api, _, _ := cluster.DynamicStringFact(lieutenant.KnownDynamicFactOpenshiftApiURL)
 		return api != ""
 	}),

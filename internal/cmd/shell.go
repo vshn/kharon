@@ -9,7 +9,6 @@ import (
 	"slices"
 
 	"github.com/fatih/color"
-	"github.com/minio/pkg/v3/wildcard"
 	"github.com/spf13/cobra"
 	"go.uber.org/multierr"
 	"k8s.io/apimachinery/pkg/labels"
@@ -21,16 +20,14 @@ import (
 )
 
 const shellCmdLongDesc = `Run a shell with a kubeconfig generated from the inventory, set up to use the proxy.
-The generated kubeconfig contains all clusters from the inventory with an OpenShift API URL.
-The kubeconfig context can be set to a specific cluster by providing the cluster ID as the first argument.
-If the first argument contains wildcards, it is treated as a pattern to filter the clusters included in the kubeconfig.
-If multiple clusters match the pattern, the context is set to the first cluster in the filtered list.
-If no argument is provided, the context is set to the first found cluster with a valid OpenShift API URL.
+The generated kubeconfig contains all clusters matching the include, exclude, and selector flags with an OpenShift API URL.
+The include filter is specified by providing them as arguments to this command and can be repeated.
+The current context is set to the first cluster.
 
 The shell is started as a login shell by default, this can be disabled with the --login flag.
-Additional shell arguments can be provided after the cluster ID or after a '--' separator.
+Additional shell arguments can be provided after a '--' separator.
 If additional arguments are provided the shell is not started as a login shell, even if the --login flag is set.
-If the --command flag is used, the provided command is run instead of the default shell, and the --login flag is ignored.
+If the --command flag is used, the provided command, the first argument after '--', is run instead of the default shell, and the --login flag is ignored.
 See examples below for details.
 
 Using the --each flag, the command can be run for each cluster individually instead of once with a kubeconfig containing all clusters.
@@ -43,11 +40,13 @@ Works on the inventory downloaded by the 'update' command, so it does not requir
 const shellCmdExample = `# Get a default login shell
 kharon shell
 
-# Get a login shell for a specific cluster
-kharon shell c-12345
+# Get a login shell for specific clusters
+kharon shell c-cluster-1
+kharon shell 'c-cluster-*'
+kharon shell c-cluster-1 c-cluster-2
 
 # Get all nodes on a specific cluster
-kharon shell c-12345 -- -c 'kharon oc-web-login; kubectl get nodes'
+kharon shell c-cluster-1 -- -c 'kharon oc-web-login; kubectl get nodes'
 
 # Collect node information for all clusters
 kharon shell --each -- sh -c 'kharon oc-web-login; kubectl get nodes'
@@ -55,8 +54,11 @@ kharon shell --each -- sh -c 'kharon oc-web-login; kubectl get nodes'
 # Collect node information for all prod clusters, excluding a certain customer
 kharon shell '*prod*' --exclude-cluster 'customer-*' --each -- sh -c 'kharon oc-web-login; kubectl get nodes'
 
+# Collect node information c-cluster-1 and c-cluster-2
+kharon shell c-cluster-1 c-cluster-2 --each -- sh -c 'kharon oc-web-login; kubectl get nodes'
+
 # Execute a custom command instead of a shell
-kharon shell c-12345 --command -- my-kube-tool -x
+kharon shell c-cluster-1 --command -- my-kube-tool -x
 `
 
 func init() {
@@ -80,7 +82,7 @@ type shellCmdFlags struct {
 func newShellCmd() *cobra.Command {
 	flags := &shellCmdFlags{}
 	cmd := &cobra.Command{
-		Use:               "shell [c-cluster-id | c-pattern-*] [-- command [args...]]",
+		Use:               "shell [c-cluster-id | c-pattern-* ...] [-- command [args...]]",
 		Short:             "Run a shell or command with a kubeconfig generated from the inventory, set up to use the proxy.",
 		Long:              shellCmdLongDesc,
 		Example:           shellCmdExample,
@@ -94,7 +96,7 @@ func newShellCmd() *cobra.Command {
 	flag.BoolVar(&flags.Command, "command", false, "Run the command at the first argument after cluster ID instead of the default shell.")
 	flag.BoolVar(&flags.Each, "each", false, "Run the command for each cluster individually instead of once with a kubeconfig containing all clusters. This flag implies --command.")
 	flag.StringSliceVar(&flags.ClusterExcludePatterns, "exclude-cluster", nil, "Exclude clusters matching the given patterns. Supports wildcards, e.g. `--exclude-cluster=c-dev-*` to exclude all clusters starting with `c-dev-`. This flag can be used multiple times to exclude multiple patterns. Useful in combination with --each to exclude certain clusters from the per-cluster execution.")
-	must(cmd.RegisterFlagCompletionFunc("exclude-cluster", completion.ClusterID(flags.InventoryFile, nil)))
+	must(cmd.RegisterFlagCompletionFunc("exclude-cluster", completion.ClusterID(flags.InventoryFile, true, nil)))
 	flag.Func("fact-selector", "Label selector to filter clusters based on their facts. Example: 'distribution=openshift4,release_channel=fast'", selectorFlagFunc(&flags.FactSelector))
 	flag.Func("dynamic-fact-selector", "Label selector to filter clusters based on their dynamic facts. Example: 'distribution=openshift4,release_channel=fast'", selectorFlagFunc(&flags.DynamicFactSelector))
 
@@ -102,11 +104,11 @@ func newShellCmd() *cobra.Command {
 }
 
 func shellCmdArgsValidator(cmd *cobra.Command, args []string, cur string) ([]string, cobra.ShellCompDirective) {
-	// Stop cluster completion after the first argument or the first '--' separator.
+	// Stop cluster completion after the first '--' separator.
 	// [cobra.Command.ArgsLenAtDash] is not yet initialized when this function is called for completion,
 	// so we check for the presence of '--' in os.Args instead.
-	if len(args) == 0 && !slices.Contains(os.Args, "--") {
-		return completion.ClusterID(clustersInventoryFile, func(cluster lieutenant.Cluster) bool {
+	if !slices.Contains(os.Args, "--") {
+		return completion.ClusterID(clustersInventoryFile, false, func(cluster lieutenant.Cluster) bool {
 			api, _, _ := cluster.DynamicStringFact(lieutenant.KnownDynamicFactOpenshiftApiURL)
 			return api != ""
 		})(cmd, args, cur)
@@ -115,10 +117,13 @@ func shellCmdArgsValidator(cmd *cobra.Command, args []string, cur string) ([]str
 }
 
 func runShell(cmd *cobra.Command, flags *shellCmdFlags, args []string) error {
-	var clusterIDOrPattern string
-	if len(args) > 0 && cmd.ArgsLenAtDash() != 0 {
-		clusterIDOrPattern = args[0]
-		args = args[1:]
+	var clusterPatterns []string
+	if cmd.ArgsLenAtDash() >= 0 {
+		clusterPatterns = args[:cmd.ArgsLenAtDash()]
+		args = args[cmd.ArgsLenAtDash():]
+	} else {
+		clusterPatterns = args
+		args = nil
 	}
 
 	if flags.InventoryFile == "" {
@@ -130,21 +135,8 @@ func runShell(cmd *cobra.Command, flags *shellCmdFlags, args []string) error {
 		return fmt.Errorf("failed to read inventory file. You might need to run the `update` command first: %w", err)
 	}
 
-	var pattern, clusterID string
-	if clusterIDOrPattern != "" {
-		if wildcard.Has(clusterIDOrPattern) || flags.Each {
-			pattern = clusterIDOrPattern
-		} else {
-			clusterID = clusterIDOrPattern
-		}
-	}
-
-	var incl []string
-	if pattern != "" {
-		incl = []string{pattern}
-	}
 	filtered := lieutenant.Filter(clusters,
-		incl,
+		clusterPatterns,
 		flags.ClusterExcludePatterns,
 		labels.Everything().Add(flags.FactSelector...),
 		labels.Everything().Add(flags.DynamicFactSelector...),
@@ -155,7 +147,7 @@ func runShell(cmd *cobra.Command, flags *shellCmdFlags, args []string) error {
 	)
 
 	// Kubeconfig wants a socks5 url not socks5h, but they are treated the same by Go.
-	tmpKubeconfig, err := writeKubeconfigToTempFile(kubeconfig.FromClusters(filtered, proxyAddrForKubeconfig(flags.ProxyAddr), clusterID))
+	tmpKubeconfig, err := writeKubeconfigToTempFile(kubeconfig.FromClusters(filtered, proxyAddrForKubeconfig(flags.ProxyAddr), ""))
 	if err != nil {
 		return fmt.Errorf("failed to write kubeconfig to temporary file: %w", err)
 	}
