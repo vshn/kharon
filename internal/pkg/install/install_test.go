@@ -12,40 +12,57 @@ import (
 )
 
 func Test_InstallLaunchdService(t *testing.T) {
-	tmpHome := withTempHome(t)
-	calls := withMockedExecutable(t)
-	withStdin(t, "y\n")
-	withUID(t, 1000)
+	for _, interactive := range []bool{false, true} {
+		t.Run(fmt.Sprintf("interactive=%v", interactive), func(t *testing.T) {
+			tmpHome := withTempHome(t)
+			calls := withMockedExecutable(t)
+			if interactive {
+				withStdin(t, "y\n")
+			} else {
+				withStdin(t, "")
+			}
+			withUID(t, 1000)
 
-	err := InstallLaunchdService()
-	require.NoError(t, err)
+			err := InstallLaunchdService(!interactive)
+			require.NoError(t, err)
 
-	contents := requireReadFileContent(t, filepath.Join(tmpHome, "Library", "LaunchAgents", "io.vshn.Kharon.plist"))
-	assert.Contains(t, contents, requireExecutable(t))
-	assert.Contains(t, contents, tmpHome)
-	assert.Contains(t, contents, "12000")
+			contents := requireReadFileContent(t, filepath.Join(tmpHome, "Library", "LaunchAgents", "io.vshn.Kharon.plist"))
+			assert.Contains(t, contents, requireExecutable(t))
+			assert.Contains(t, contents, tmpHome)
+			assert.Contains(t, contents, "12000")
 
-	expectedPath := filepath.Join(tmpHome, "Library", "LaunchAgents", "io.vshn.Kharon.plist")
-	assert.Contains(t, calls(), fmt.Sprintf("launchctl bootout gui/1000/%s", launchdServiceLabel))
-	assert.Contains(t, calls(), fmt.Sprintf("launchctl bootstrap gui/1000 %s", expectedPath))
+			expectedPath := filepath.Join(tmpHome, "Library", "LaunchAgents", "io.vshn.Kharon.plist")
+			assert.Contains(t, calls(), fmt.Sprintf("launchctl bootout gui/1000/%s", launchdServiceLabel))
+			assert.Contains(t, calls(), fmt.Sprintf("launchctl bootstrap gui/1000 %s", expectedPath))
+		})
+	}
 }
 
 func Test_InstallSystemdService(t *testing.T) {
-	tmpHome := withTempHome(t)
-	calls := withMockedExecutable(t)
-	withStdin(t, "y\ny\n")
-	withUID(t, 1000)
+	for _, interactive := range []bool{false, true} {
+		t.Run(fmt.Sprintf("interactive=%v", interactive), func(t *testing.T) {
+			tmpHome := withTempHome(t)
+			calls := withMockedExecutable(t)
 
-	err := InstallSystemdService()
-	require.NoError(t, err)
+			if interactive {
+				withStdin(t, "y\ny\n")
+			} else {
+				withStdin(t, "")
+			}
 
-	serviceContents := requireReadFileContent(t, filepath.Join(tmpHome, ".config", "systemd", "user", "kharon.service"))
-	assert.Contains(t, serviceContents, requireExecutable(t))
-	socketContents := requireReadFileContent(t, filepath.Join(tmpHome, ".config", "systemd", "user", "kharon.socket"))
-	assert.Contains(t, socketContents, "12000")
+			withUID(t, 1000)
+			err := InstallSystemdService(!interactive)
+			require.NoError(t, err)
 
-	assert.Contains(t, calls(), "systemctl --user enable kharon.socket")
-	assert.Contains(t, calls(), "systemctl --user enable --now kharon.service")
+			serviceContents := requireReadFileContent(t, filepath.Join(tmpHome, ".config", "systemd", "user", "kharon.service"))
+			assert.Contains(t, serviceContents, requireExecutable(t))
+			socketContents := requireReadFileContent(t, filepath.Join(tmpHome, ".config", "systemd", "user", "kharon.socket"))
+			assert.Contains(t, socketContents, "12000")
+
+			assert.Contains(t, calls(), "systemctl --user enable kharon.socket")
+			assert.Contains(t, calls(), "systemctl --user enable --now kharon.service")
+		})
+	}
 }
 
 func requireExecutable(t *testing.T) string {

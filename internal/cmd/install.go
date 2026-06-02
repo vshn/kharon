@@ -22,11 +22,14 @@ The proxy will be configured with on-demand activation and only be started when 
 const installCmdExample = `# Install kharon
 kharon install`
 
+var installYes bool
+
 func init() {
 	RootCmd.AddCommand(installCmd)
 
 	flag := installCmd.Flags()
 	flag.StringVar(&proxyMappingFile, "mapping-file", proxyMappingFilePath(), "Path to the domain to jumphost mapping file. This file can be generated with the `update` subcommand. The installer tests if the file can be read and parsed correctly before proceeding.")
+	flag.BoolVar(&installYes, "yes", false, "Automatically answer yes to all prompts.")
 }
 
 var installCmd = &cobra.Command{
@@ -47,12 +50,12 @@ func runInstall(cmd *cobra.Command, args []string) {
 
 	switch runtime.GOOS {
 	case "linux":
-		if err := install.InstallSystemdService(); err != nil {
+		if err := install.InstallSystemdService(installYes); err != nil {
 			slog.Error("Failed to install systemd service", "error", err)
 			os.Exit(1)
 		}
 	case "darwin":
-		if err := install.InstallLaunchdService(); err != nil {
+		if err := install.InstallLaunchdService(installYes); err != nil {
 			slog.Error("Failed to install launchd service", "error", err)
 			os.Exit(1)
 		}
