@@ -12,6 +12,7 @@ import (
 	"github.com/minio/pkg/v3/wildcard"
 	"github.com/spf13/cobra"
 	"go.uber.org/multierr"
+	"k8s.io/apimachinery/pkg/labels"
 
 	"github.com/vshn/kharon/internal/pkg/cache"
 	"github.com/vshn/kharon/internal/pkg/completion"
@@ -71,6 +72,9 @@ type shellCmdFlags struct {
 	Each    bool
 
 	ClusterExcludePatterns []string
+
+	FactSelector        labels.Requirements
+	DynamicFactSelector labels.Requirements
 }
 
 func newShellCmd() *cobra.Command {
@@ -91,6 +95,8 @@ func newShellCmd() *cobra.Command {
 	flag.BoolVar(&flags.Each, "each", false, "Run the command for each cluster individually instead of once with a kubeconfig containing all clusters. This flag implies --command.")
 	flag.StringSliceVar(&flags.ClusterExcludePatterns, "exclude-cluster", nil, "Exclude clusters matching the given patterns. Supports wildcards, e.g. `--exclude-cluster=c-dev-*` to exclude all clusters starting with `c-dev-`. This flag can be used multiple times to exclude multiple patterns. Useful in combination with --each to exclude certain clusters from the per-cluster execution.")
 	must(cmd.RegisterFlagCompletionFunc("exclude-cluster", completion.ClusterID(flags.InventoryFile, nil)))
+	flag.Func("fact-selector", "Label selector to filter clusters based on their facts. Example: 'distribution=openshift4,release_channel=fast'", selectorFlagFunc(&flags.FactSelector))
+	flag.Func("dynamic-fact-selector", "Label selector to filter clusters based on their dynamic facts. Example: 'distribution=openshift4,release_channel=fast'", selectorFlagFunc(&flags.DynamicFactSelector))
 
 	return cmd
 }
@@ -133,22 +139,20 @@ func runShell(cmd *cobra.Command, flags *shellCmdFlags, args []string) error {
 		}
 	}
 
-	filtered := make([]lieutenant.Cluster, 0, len(clusters))
-	for _, cluster := range clusters {
-		if apiURL, _, _ := cluster.DynamicStringFact(lieutenant.KnownDynamicFactOpenshiftApiURL); apiURL == "" {
-			continue
-		}
-		if pattern != "" && !wildcard.Match(pattern, cluster.ID) {
-			continue
-		}
-
-		if slices.ContainsFunc(flags.ClusterExcludePatterns, func(excludePattern string) bool {
-			return wildcard.Match(excludePattern, cluster.ID)
-		}) {
-			continue
-		}
-		filtered = append(filtered, cluster)
+	var incl []string
+	if pattern != "" {
+		incl = []string{pattern}
 	}
+	filtered := lieutenant.Filter(clusters,
+		incl,
+		flags.ClusterExcludePatterns,
+		labels.Everything().Add(flags.FactSelector...),
+		labels.Everything().Add(flags.DynamicFactSelector...),
+		func(c lieutenant.Cluster) bool {
+			apiURL, _, _ := c.DynamicStringFact(lieutenant.KnownDynamicFactOpenshiftApiURL)
+			return apiURL != ""
+		},
+	)
 
 	// Kubeconfig wants a socks5 url not socks5h, but they are treated the same by Go.
 	tmpKubeconfig, err := writeKubeconfigToTempFile(kubeconfig.FromClusters(filtered, proxyAddrForKubeconfig(flags.ProxyAddr), clusterID))

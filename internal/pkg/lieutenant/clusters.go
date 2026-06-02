@@ -7,6 +7,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
+
+	"github.com/minio/pkg/v3/wildcard"
+	"k8s.io/apimachinery/pkg/labels"
 
 	"github.com/vshn/kharon/internal/pkg/lieutenant/login"
 )
@@ -111,4 +115,42 @@ func FindByAPIURL(clusters []Cluster, apiURL string) (Cluster, bool) {
 		}
 	}
 	return Cluster{}, false
+}
+
+// Filter filters the given slice of clusters based on the provided include and exclude patterns, as well as fact selectors.
+// An empty includePatterns slice matches everything.
+func Filter(clusters []Cluster, includePatterns, excludePatterns []string, factSelector, dynamicFactSelector labels.Selector, predicate func(Cluster) bool) []Cluster {
+	filtered := make([]Cluster, 0, len(clusters))
+	for _, cluster := range clusters {
+		if predicate != nil && !predicate(cluster) {
+			continue
+		}
+		if len(includePatterns) > 0 && !matchesPatterns(cluster.ID, includePatterns) {
+			continue
+		}
+		if matchesPatterns(cluster.ID, excludePatterns) {
+			continue
+		}
+		if matchesSelector(cluster.Facts, factSelector) && matchesSelector(cluster.DynamicFacts, dynamicFactSelector) {
+			filtered = append(filtered, cluster)
+		}
+	}
+
+	return filtered
+}
+
+func matchesPatterns(s string, patterns []string) bool {
+	return slices.ContainsFunc(patterns, func(p string) bool {
+		return wildcard.Match(p, s)
+	})
+}
+
+func matchesSelector(facts map[string]any, selector labels.Selector) bool {
+	labelsSet := make(labels.Set, len(facts))
+	for k, v := range facts {
+		if str, ok := v.(string); ok {
+			labelsSet[k] = str
+		}
+	}
+	return selector.Matches(labelsSet)
 }

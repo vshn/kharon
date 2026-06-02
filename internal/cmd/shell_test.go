@@ -40,6 +40,9 @@ func Test_RunShell(t *testing.T) {
 			},
 		}, {
 			ID: "c-inventory-2",
+			Facts: map[string]any{
+				"env": "prod",
+			},
 			DynamicFacts: map[string]any{
 				lieutenant.KnownDynamicFactOpenshiftApiURL: "https://api.cluster-inventory-2.example.com",
 			},
@@ -47,6 +50,7 @@ func Test_RunShell(t *testing.T) {
 			ID: "c-other-cluster",
 			DynamicFacts: map[string]any{
 				lieutenant.KnownDynamicFactOpenshiftApiURL: "https://api.cluster-other-cluster.example.com",
+				"huh": "ugh",
 			},
 		},
 	}))
@@ -165,6 +169,18 @@ oh no`,
 			args: []string{"c-inventory-1", "--each", "--", "sh", "-c", "exit 0"},
 
 			expectedStdout: `--- # c-inventory-1`,
+		}, {
+			name: "match facts with --fact-selector",
+
+			args: []string{"--each", "--fact-selector", "env=prod", "--", "sh", "-c", "exit 0"},
+
+			expectedStdout: `--- # c-inventory-2`,
+		}, {
+			name: "match facts with --dynamic-fact-selector",
+
+			args: []string{"--each", "--dynamic-fact-selector", "huh=ugh", "--", "sh", "-c", "exit 0"},
+
+			expectedStdout: `--- # c-other-cluster`,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

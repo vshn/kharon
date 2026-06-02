@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"k8s.io/apimachinery/pkg/labels"
 
 	"github.com/vshn/kharon/internal/pkg/lieutenant/login"
 )
@@ -74,4 +75,31 @@ func Test_FindByAPIURL(t *testing.T) {
 
 	_, found = FindByAPIURL(clusters, "https://api.cluster-3.example.com")
 	require.False(t, found)
+}
+
+func Test_Filter(t *testing.T) {
+	clusters := []Cluster{
+		{ID: "other00-1", Facts: map[string]any{"env": "prod"}, DynamicFacts: map[string]any{"tier": "backend"}},
+		{ID: "cluster-1", Facts: map[string]any{"env": "prod"}, DynamicFacts: map[string]any{"tier": "backend"}},
+		{ID: "cluster-2", Facts: map[string]any{"env": "prod"}, DynamicFacts: map[string]any{"tier": "backend"}},
+		{ID: "cluster-3", Facts: map[string]any{"env": "prod"}, DynamicFacts: map[string]any{"tier": "frontend"}},
+		{ID: "cluster-4", Facts: map[string]any{"env": "dev"}, DynamicFacts: map[string]any{"tier": "backend"}},
+	}
+
+	includePatterns := []string{"cluster-*"}
+	excludePatterns := []string{"cluster-2"}
+	factSelector := labels.SelectorFromSet(labels.Set{"env": "prod"})
+	dynamicFactSelector := labels.SelectorFromSet(labels.Set{"tier": "backend"})
+
+	filtered := Filter(clusters, includePatterns, excludePatterns, factSelector, dynamicFactSelector, nil)
+	require.Len(t, filtered, 1)
+	require.Equal(t, "cluster-1", filtered[0].ID)
+
+	require.Equal(t, clusters, Filter(clusters, nil, nil, labels.Everything(), labels.Everything(), nil), "Empty include matches everything")
+
+	predicateFiltered := Filter(clusters, nil, nil, labels.Everything(), labels.Everything(), func(c Cluster) bool {
+		return c.ID == "cluster-3"
+	})
+	require.Len(t, predicateFiltered, 1)
+	require.Equal(t, "cluster-3", predicateFiltered[0].ID)
 }
