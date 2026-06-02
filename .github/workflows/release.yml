@@ -150,8 +150,8 @@ jobs:
 
       - name: Update Cask version and checksums
         run: |
-          ls -l dist
-          go run ./hack/homebrew "${{ github.ref_name }}" dist/checksums.txt > homebrew-tap/Casks/kharon.rb
+          ls -l
+          go run ./hack/homebrew "${{ github.ref_name }}" checksums.txt > homebrew-tap/Casks/kharon.rb
 
       - name: Commit and push
         uses: stefanzweifel/git-auto-commit-action@04702edda442b2e678b25b537cec683a1493fcb9 # v7
