@@ -24,6 +24,7 @@ Setup [SSH Jumphost (sshop)](https://vshnwiki.atlassian.net/wiki/spaces/VT/pages
 Currently the following setup options are supported:
 * [Homebrew](./docs/setup/homebrew.adoc)
 * Arch [PKGBUILD](./PKGBUILD)
+* [Install script](./docs/setup/script.adoc)
 * Download the [latest release](https://github.com/vshn/kharon/releases/latest) and add it to your `PATH`
 * Build from source
 
