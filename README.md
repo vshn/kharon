@@ -21,7 +21,13 @@ Currently the tool relies on a SSH agent running. Either the `SSH_AUTH_SOCK` env
 
 Setup [SSH Jumphost (sshop)](https://vshnwiki.atlassian.net/wiki/spaces/VT/pages/8291275/SSH+Jumphost+sshop).
 
-Install `kharon` in your `PATH` by either downloading the [latest release](https://github.com/vshn/kharon/releases/latest) or building from source:
+Currently the following setup options are supported:
+* [Homebrew](./docs/setup/homebrew.adoc)
+* Arch [PKGBUILD](./PKGBUILD)
+* Download the [latest release](https://github.com/vshn/kharon/releases/latest) and add it to your `PATH`
+* Build from source
+
+#### Build from source
 
 ```sh
 make build

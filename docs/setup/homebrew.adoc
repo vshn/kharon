@@ -1,0 +1,12 @@
+# Homebrew Setup
+
+Homebrew install Kharon and keeps the proxy service up to date. No `kharon install` required.
+
+[source,shell]
+----
+brew install vshn/tap/kharon
+
+kharon update
+----
+
+Continue setting up your browser as described in the link:firefox.adoc[docs].
