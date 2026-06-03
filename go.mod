@@ -1,6 +1,6 @@
 module github.com/vshn/kharon
 
-go 1.26.3
+go 1.26.4
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.41.9
@@ -28,7 +28,7 @@ require (
 	k8s.io/apimachinery v0.36.1
 	k8s.io/client-go v0.36.1
 	sigs.k8s.io/yaml v1.6.0
-	tailscale.com v1.98.5
+	tailscale.com v1.100.0
 )
 
 require (
