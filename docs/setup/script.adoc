@@ -1,0 +1,59 @@
+# Install script
+
+We provide an install script at link:../../hack/install.sh[`/hack/install.sh`].
+
+If you're a Homebrew user, see the link:homebrew.adoc[Homebrew setup docs] for a more integrated setup experience.
+
+If you're on Arch Linux, see the link:../../PKGBUILD[PKGBUILD].
+
+## Quick start
+
+If you're feeling lucky, you can install Kharon to `~/.local/bin/` with
+
+[source,shell]
+----
+curl -fsSL https://raw.githubusercontent.com/vshn/kharon/refs/heads/main/hack/install.sh | bash
+----
+
+Afterwards, run `kharon install` to setup the proxy.
+
+Finally, set up your browser as described in the link:firefox.adoc[docs].
+
+## Automated updates with a systemd timer
+
+If you trust us and want automated updates, you can download the script and run it as a systemd timer:
+
+[source,shell]
+----
+curl -fsSLo ~/.local/bin/kharon-update.sh \
+  https://raw.githubusercontent.com/vshn/kharon/refs/heads/main/hack/install.sh
+chmod +x ~/.local/bin/kharon-update.sh
+
+cat >~/.config/systemd/user/kharon-update.service <<EOF
+[Unit]
+Description=Kharon updater
+
+[Service]
+ExecStart=%h/.local/bin/kharon-update.sh
+
+[Install]
+WantedBy=default.target
+EOF
+
+cat >~/.config/systemd/user/kharon-update.timer <<EOF
+[Unit]
+Description=Regularly update Kharon (default: 08:00 every day, persistent)
+
+[Timer]
+OnCalendar=*-*-* 08:00:00
+AccuracySec=10min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+
+systemctl --user daemon-reload
+systemctl --user enable kharon-update.timer
+systemctl --user start kharon-update.timer
+----
