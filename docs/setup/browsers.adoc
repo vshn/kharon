@@ -1,0 +1,4 @@
+# Browser setup
+
+* link:firefox.adoc[Firefox]
+* Add your browser here! Pull requests are welcome.

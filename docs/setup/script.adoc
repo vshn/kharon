@@ -17,7 +17,7 @@ curl -fsSL https://raw.githubusercontent.com/vshn/kharon/refs/heads/main/hack/in
 
 Afterwards, run `kharon install` to setup the proxy.
 
-Finally, set up your browser as described in the link:firefox.adoc[docs].
+Finally, set up your browser as described in the link:browsers.adoc[docs].
 
 ## Automated updates with a systemd timer
 

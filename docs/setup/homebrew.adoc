@@ -9,4 +9,4 @@ brew install vshn/tap/kharon
 kharon update
 ----
 
-Continue setting up your browser as described in the link:firefox.adoc[docs].
+Continue setting up your browser as described in the link:browsers.adoc[docs].
