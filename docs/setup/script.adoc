@@ -12,8 +12,17 @@ If you're feeling lucky, you can install Kharon to `~/.local/bin/` with
 
 [source,shell]
 ----
+export KHARON_INSTALL_DIR=~/.local/bin # <1>
 curl -fsSL https://raw.githubusercontent.com/vshn/kharon/refs/heads/main/hack/install.sh | bash
 ----
+<1> The script installs the Kharon binary to the directory given in the `KHARON_INSTALL_DIR` environment variable.
+If the variable is unset, the script installs Kharon to `~/.local/bin`.
+
+[NOTE]
+====
+The install script doesn't modify your `$PATH`.
+Either set `KHARON_INSTALL_DIR` to a directory that's already in your `$PATH` or update your `$PATH` before continuing.
+====
 
 Afterwards, run `kharon install` to setup the proxy.
 
@@ -25,16 +34,20 @@ If you trust us and want automated updates, you can download the script and run 
 
 [source,shell]
 ----
-curl -fsSLo ~/.local/bin/kharon-update.sh \
+export KHARON_INSTALL_DIR=~/.local/bin # <1>
+
+curl -fsSLo "${KHARON_INSTALL_DIR}/kharon-update.sh" \
   https://raw.githubusercontent.com/vshn/kharon/refs/heads/main/hack/install.sh
-chmod +x ~/.local/bin/kharon-update.sh
+chmod +x "${KHARON_INSTALL_DIR}/kharon-update.sh"
 
 cat >~/.config/systemd/user/kharon-update.service <<EOF
 [Unit]
 Description=Kharon updater
 
 [Service]
-ExecStart=%h/.local/bin/kharon-update.sh
+Type=oneshot
+Environment=KHARON_INSTALL_DIR=${KHARON_INSTALL_DIR}
+ExecStart=${KHARON_INSTALL_DIR}/kharon-update.sh
 
 [Install]
 WantedBy=default.target
@@ -57,3 +70,4 @@ systemctl --user daemon-reload
 systemctl --user enable kharon-update.timer
 systemctl --user start kharon-update.timer
 ----
+<1> You should set this variable to the directory where you've already installed Kharon or want to install Kharon.
