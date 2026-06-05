@@ -2,8 +2,19 @@
 # vim: et sw=2
 set -eu
 
+install_dir=${KHARON_INSTALL_DIR:-~/.local/bin}
+
+# Add the Kharon install dir to the script's $PATH.
+#
+# NOTE(sg): This is required so that the script reliably finds the existing
+# Kharon binary when executed through a systemd user unit. From what we've
+# found so far, the systemd user daemon eventually inherits the user's custom
+# PATH in some environments, possibly depending on how the user's session is
+# started.
+export PATH="${PATH}:${install_dir}"
+
 version=$(kharon version 2>/dev/null| cut -d' ' -f2)
-location=~/.local/bin/kharon
+location="${install_dir}/kharon"
 if [ "${version}" != "" ]; then
   location=$(which kharon)
 elif [ "${version}" = "" ] && go version -m "$(which kharon)" &>/dev/null; then
@@ -14,7 +25,7 @@ fi
 latest_release=$(curl -fsSL "https://api.github.com/repos/vshn/kharon/releases/latest")
 latest=$(jq -r -n --argjson latest "$latest_release" '$latest.tag_name')
 if [ "${version}" = "" ]; then
-  echo "No Kharon found in PATH, installing ${latest}"
+  echo "No Kharon found in PATH, installing ${latest} to ${location}"
 elif [ "${version}" != "${latest}" ]; then
   echo "Kharon version ${version} found at ${location}, upgrading to ${latest}"
 else
@@ -73,3 +84,5 @@ if [ "$PLATFORM" = "darwin" ]; then
   codesign -s - --deep --force "${location}"
 fi
 rm -r "${download_dir}"
+echo "Kharon installed successfully!"
+echo "Make sure to add $(dirname "${location}") to your PATH if it isn't already!"
