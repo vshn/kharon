@@ -1,0 +1,33 @@
+# Tips and tricks
+
+A collection of optional shell snippets and workflows that make working with Kharon more convenient.
+
+## Auto `oc-web-login` after a context switch (zsh)
+
+Inside a `kharon shell` you usually run `kharon oc-web-login` by hand after switching
+clusters (e.g. with link:https://github.com/ahmetb/kubectx[kubectx]).
+The following zsh hook does it for you: whenever the current `kubectl` context changes,
+it logs in to the new cluster automatically.
+
+The hook is gated on the `KHARON_SHELL` environment variable, which `kharon shell` sets
+for the shell it spawns. It is therefore a no-op in your regular shells and only activates
+inside a `kharon shell`.
+
+Add it to your `~/.zshrc`:
+
+[source,shell]
+----
+# Auto 'kharon oc-web-login' after the kubectl context changes inside a 'kharon shell'.
+if [[ -n "$KHARON_SHELL" ]]; then
+  _kharon_last_ctx=""
+  _kharon_autologin() {
+    local ctx; ctx=$(kubectl config current-context 2>/dev/null)
+    if [[ -n "$ctx" && "$ctx" != "$_kharon_last_ctx" ]]; then
+      _kharon_last_ctx="$ctx"
+      kharon oc-web-login
+    fi
+  }
+  autoload -Uz add-zsh-hook
+  add-zsh-hook precmd _kharon_autologin
+fi
+----
