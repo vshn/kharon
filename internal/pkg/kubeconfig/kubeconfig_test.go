@@ -59,21 +59,28 @@ func Test_FromClusters_Encode(t *testing.T) {
 		{
 			"context": {
 				"cluster": "c-example-2",
-				"user": ""
+				"user": "anonymous"
 			},
 			"name": "c-example-2"
 		},
 		{
 			"context": {
 				"cluster": "c-test-1",
-				"user": ""
+				"user": "anonymous"
 			},
 			"name": "c-test-1"
 		}
 	],
 	"current-context": "c-test-1",
 	"kind": "Config",
-	"users": null
+	"users": [
+		{
+			"name": "anonymous",
+			"user": {
+				"username": "anonymous"
+			}
+		}
+	]
 }`
 
 	require.JSONEq(t, expected, string(resultJSON))
