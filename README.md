@@ -64,3 +64,7 @@ or login to your cluster of choice directly (the APPUiO lab cluster is a good ca
 ```sh
 kharon oc-web-login c-appuio-lab-cloudscale-rma-0
 ```
+
+### Tips and tricks
+
+See [Tips and tricks](./docs/setup/tips.adoc)
