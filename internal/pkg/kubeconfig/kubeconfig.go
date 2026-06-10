@@ -20,11 +20,16 @@ type Config = model.Config
 // The functions does not validate that the provided currentContext actually exists.
 // If not provided, the first cluster with a valid API URL will be set as the current context.
 func FromClusters(clusters []lieutenant.Cluster, proxyURL, currentContext string) *Config {
+	const authInfoName = "anonymous"
+
 	kc := model.NewConfig()
 	currentContextSet := false
 	if currentContext != "" {
 		kc.CurrentContext = currentContext
 		currentContextSet = true
+	}
+	kc.AuthInfos[authInfoName] = &model.AuthInfo{
+		Username: authInfoName,
 	}
 	for _, c := range clusters {
 		api, _, _ := c.DynamicStringFact(lieutenant.KnownDynamicFactOpenshiftApiURL)
@@ -38,7 +43,8 @@ func FromClusters(clusters []lieutenant.Cluster, proxyURL, currentContext string
 			ProxyURL: proxyURL,
 		}
 		kc.Contexts[contextName] = &model.Context{
-			Cluster: clusterName,
+			Cluster:  clusterName,
+			AuthInfo: authInfoName,
 		}
 		if !currentContextSet {
 			kc.CurrentContext = contextName
