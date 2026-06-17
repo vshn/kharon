@@ -18,18 +18,8 @@ image::./img/firefox-about-preferences.png[]
 +
 [source]
 ----
-https://raw.githubusercontent.com/vshn/kharon/main/static-proxy.pac
-----
-+
-[NOTE]
-====
-Experimental: Kharon provides a dynamic proxy configuration file that might improve performance by allowing Firefox to bypass the proxy for certain domains. This feature is currently experimental and may not work as expected in all cases. If you encounter issues, you can switch back to the static proxy pac file.
-
-[source]
-----
 http://localhost:12000/proxy.pac
 ----
-====
 
 . Select "Proxy DNS when using SOCKS v5".
 +
