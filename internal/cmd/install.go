@@ -43,9 +43,13 @@ var installCmd = &cobra.Command{
 
 func runInstall(cmd *cobra.Command, args []string) {
 	if _, err := cache.ReadProxyMappingFile(proxyMappingFile); err != nil {
-		fmt.Printf("Failed to read the proxy mapping file %s.\n", color.MagentaString(proxyMappingFile))
-		fmt.Printf("Please run %s before continuing.\n", color.CyanString("kharon update"))
-		os.Exit(1)
+		fmt.Fprintf(os.Stderr, "%s Failed to read the proxy mapping file %s.\n", color.YellowString("Warning:"), color.MagentaString(proxyMappingFile))
+		if installYes {
+			fmt.Fprintf(os.Stderr, "Please run %s after installation.\n", color.CyanString("kharon update"))
+		} else {
+			fmt.Fprintf(os.Stderr, "Please run %s before continuing.\n", color.CyanString("kharon update"))
+			os.Exit(1)
+		}
 	}
 
 	switch runtime.GOOS {
