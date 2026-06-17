@@ -6,7 +6,14 @@ Homebrew install Kharon and keeps the proxy service up to date. No `kharon insta
 ----
 brew install vshn/tap/kharon
 
+# Update jumphost configurations
 kharon update
+
+# Tests the SSH jumphosts and cluster connections, and prints a summary of the results.
+# Note that some failing clusters may be expected, e.g. if it's a known weird jumphost.
+# If you're part of the solutions OnCall team you probably don't need access to those.
+# Also see https://vshnwiki.atlassian.net/wiki/x/I4GbLQ
+kharon test
 ----
 
 Continue setting up your browser as described in the link:browsers.adoc[docs].
