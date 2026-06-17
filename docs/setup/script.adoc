@@ -24,7 +24,14 @@ The install script doesn't modify your `$PATH`.
 Either set `KHARON_INSTALL_DIR` to a directory that's already in your `$PATH` or update your `$PATH` before continuing.
 ====
 
-Afterwards, run `kharon install` to setup the proxy.
+Afterwards, run `kharon install` to setup the proxy, and `kharon test` to test the SSH jumphosts and cluster connections.
+
+[NOTE]
+====
+Some failing clusters when running `kharon test` may be expected, e.g. if it's a known weird jumphost.
+If you're part of the solutions OnCall team you probably don't need access to those.
+Also see https://vshnwiki.atlassian.net/wiki/x/I4GbLQ
+====
 
 Finally, set up your browser as described in the link:browsers.adoc[docs].
 

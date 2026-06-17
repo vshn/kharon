@@ -46,11 +46,19 @@ kharon update
 Install the proxy with the interactive installer:
 
 ```sh
+# Note that Homebrew will automatically install the proxy for you, so you can skip this step if you installed via Homebrew.
+
 # This will install a systemd/launchd unit interactively.
 # The proxy will be set up in "on-demand" mode, which means it will only start when
 # a connection is made to the proxy port and will stop after a period of inactivity.
 # Don't forget to setup auto-complete for your shell of choice, the installer will remind you to do so!
 kharon install
+
+# Tests the SSH jumphosts and cluster connections, and prints a summary of the results.
+# Note that some failing clusters may be expected, e.g. if it's a known weird jumphost.
+# If you're part of the solutions OnCall team you probably don't need access to those.
+# Also see https://vshnwiki.atlassian.net/wiki/x/I4GbLQ
+kharon test
 ```
 
 [Point your browser](./docs/setup/browsers.adoc) to `socks5h://localhost:12000` or get a shell with environment and kube configs set up:
