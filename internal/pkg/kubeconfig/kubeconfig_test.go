@@ -59,14 +59,14 @@ func Test_FromClusters_Encode(t *testing.T) {
 		{
 			"context": {
 				"cluster": "c-example-2",
-				"user": "anonymous"
+				"user": "c-example-2"
 			},
 			"name": "c-example-2"
 		},
 		{
 			"context": {
 				"cluster": "c-test-1",
-				"user": "anonymous"
+				"user": "c-test-1"
 			},
 			"name": "c-test-1"
 		}
@@ -75,7 +75,13 @@ func Test_FromClusters_Encode(t *testing.T) {
 	"kind": "Config",
 	"users": [
 		{
-			"name": "anonymous",
+			"name": "c-example-2",
+			"user": {
+				"username": "anonymous"
+			}
+		},
+		{
+			"name": "c-test-1",
 			"user": {
 				"username": "anonymous"
 			}

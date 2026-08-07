@@ -28,9 +28,6 @@ func FromClusters(clusters []lieutenant.Cluster, proxyURL, currentContext string
 		kc.CurrentContext = currentContext
 		currentContextSet = true
 	}
-	kc.AuthInfos[authInfoName] = &model.AuthInfo{
-		Username: authInfoName,
-	}
 	for _, c := range clusters {
 		api, _, _ := c.DynamicStringFact(lieutenant.KnownDynamicFactOpenshiftApiURL)
 		if api == "" {
@@ -44,7 +41,10 @@ func FromClusters(clusters []lieutenant.Cluster, proxyURL, currentContext string
 		}
 		kc.Contexts[contextName] = &model.Context{
 			Cluster:  clusterName,
-			AuthInfo: authInfoName,
+			AuthInfo: clusterName,
+		}
+		kc.AuthInfos[clusterName] = &model.AuthInfo{
+			Username: authInfoName,
 		}
 		if !currentContextSet {
 			kc.CurrentContext = contextName
