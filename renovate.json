@@ -21,6 +21,12 @@
     {
       "matchManagers": ["github-actions"],
       "groupName": "github actions dependencies"
+    },
+    {
+      "matchManagers": ["gomod"],
+      "matchDepNames": ["go"],
+      "matchDepTypes": ["golang"],
+      "rangeStrategy": "bump"
     }
   ]
 }
