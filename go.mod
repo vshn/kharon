@@ -1,6 +1,6 @@
 module github.com/vshn/kharon
 
-go 1.26.5
+go 1.27.1
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.42.0
