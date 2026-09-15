@@ -165,8 +165,8 @@ github.com/mattn/go-isatty v0.0.22/go.mod h1:ZXfXG4SQHsB/w3ZeOYbR0PrPwLy+n6xiMrJ
 github.com/miekg/dns v1.1.57/go.mod h1:uqRjCRUuEAA6qsOiJvDd+CFo/vW+y5WR6SNmHE55hZk=
 github.com/miekg/dns v1.1.72 h1:vhmr+TF2A3tuoGNkLDFK9zi36F2LS+hKTRW0Uf8kbzI=
 github.com/miekg/dns v1.1.72/go.mod h1:+EuEPhdHOsfk6Wk5TT2CzssZdqkmFhf8r+aVyDEToIs=
-github.com/minio/pkg/v3 v3.9.0 h1:nh+9+O4C/PjW4i8w05rT5f7CuMzQ0nuqHezC9yUMhOs=
-github.com/minio/pkg/v3 v3.9.0/go.mod h1:gBNHbob7QUCu/5nOtkAEEpN6diu1o1lwFpEnzU35s9U=
+github.com/minio/pkg/v3 v3.11.0 h1:WjzWGP7lyuupJgUSRim1RDtNujHtESyMQF7qSR4r5Dg=
+github.com/minio/pkg/v3 v3.11.0/go.mod h1:gBNHbob7QUCu/5nOtkAEEpN6diu1o1lwFpEnzU35s9U=
 github.com/moby/docker-image-spec v1.3.1 h1:jMKff3w6PgbfSa69GfNg+zN/XLhfXJGnEx3Nl2EsFP0=
 github.com/moby/docker-image-spec v1.3.1/go.mod h1:eKmb5VW8vQEh/BAr2yvVNvuiJuY6UIocYsFu/DxxRpo=
 github.com/moby/go-archive v0.2.0 h1:zg5QDUM2mi0JIM9fdQZWC7U8+2ZfixfTYoHL7rWUcP8=
