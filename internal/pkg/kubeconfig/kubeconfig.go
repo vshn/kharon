@@ -20,7 +20,6 @@ type Config = model.Config
 // The functions does not validate that the provided currentContext actually exists.
 // If not provided, the first cluster with a valid API URL will be set as the current context.
 func FromClusters(clusters []lieutenant.Cluster, proxyURL, currentContext string) *Config {
-	const authInfoName = "anonymous"
 
 	kc := model.NewConfig()
 	currentContextSet := false
@@ -29,29 +28,60 @@ func FromClusters(clusters []lieutenant.Cluster, proxyURL, currentContext string
 		currentContextSet = true
 	}
 	for _, c := range clusters {
-		api, _, _ := c.DynamicStringFact(lieutenant.KnownDynamicFactOpenshiftApiURL)
+		api, _, _ := c.GetApiURL()
 		if api == "" {
 			continue
 		}
 		clusterName := c.ID
 		contextName := c.ID
+		caData, _, _ := c.GetCAData()
+		authInfo, _ := getAuthInfo(c)
 		kc.Clusters[clusterName] = &model.Cluster{
-			Server:   api,
-			ProxyURL: proxyURL,
+			Server:                   api,
+			ProxyURL:                 proxyURL,
+			CertificateAuthorityData: caData,
 		}
 		kc.Contexts[contextName] = &model.Context{
 			Cluster:  clusterName,
 			AuthInfo: clusterName,
 		}
-		kc.AuthInfos[clusterName] = &model.AuthInfo{
-			Username: authInfoName,
-		}
+		kc.AuthInfos[clusterName] = authInfo
 		if !currentContextSet {
 			kc.CurrentContext = contextName
 			currentContextSet = true
 		}
 	}
 	return kc
+}
+
+func getAuthInfo(c lieutenant.Cluster) (*model.AuthInfo, error) {
+	const authInfoName = "anonymous"
+	if !c.UseOIDC() {
+		return &model.AuthInfo{
+			Username: authInfoName,
+		}, nil
+	}
+
+	oidcIssuer, oidcClientPattern, _, err := c.GetOIDCInfo()
+	if err != nil {
+		return nil, fmt.Errorf("unable to retrieve OIDC parameters for cluster %s: %w", c.ID, err)
+	}
+
+	return &model.AuthInfo{
+		Exec: &model.ExecConfig{
+			Command:            "kubectl",
+			APIVersion:         "client.authentication.k8s.io/v1beta1",
+			InteractiveMode:    model.IfAvailableExecInteractiveMode,
+			ProvideClusterInfo: false,
+			Args: []string{
+				"oidc-login",
+				"get-token",
+				fmt.Sprintf("--oidc-issuer-url=%s", oidcIssuer),
+				fmt.Sprintf("--oidc-client-id=%s", fmt.Sprintf(oidcClientPattern, c.ID)),
+				"--oidc-extra-scope=email offline_access profile openid",
+			},
+		},
+	}, nil
 }
 
 // Encode encodes the given kubeconfig Config object to the provided writer in YAML format.
@@ -89,7 +119,7 @@ var urlToContextReplacementRegex = regexp.MustCompile(`[^a-zA-Z0-9:]`)
 
 // InsertConnectionInfoIntoKubeconfig inserts a new cluster, context, and auth info into the kubeconfig for the given context name, API URL, proxy URL, and token.
 // If contextName is empty, a context name will be generated from the API URL by removing the protocol and replacing non-alphanumeric characters with dashes.
-func InsertConnectionInfoIntoKubeconfig(contextName, apiURL, proxyURL, token string) error {
+func InsertConnectionInfoIntoKubeconfig(contextName, apiURL, proxyURL, token string, caData []byte) error {
 	if contextName == "" {
 		contextName = urlToContextReplacementRegex.ReplaceAllString(strings.TrimPrefix(strings.TrimPrefix(apiURL, "http://"), "https://"), "-")
 	}
@@ -97,8 +127,9 @@ func InsertConnectionInfoIntoKubeconfig(contextName, apiURL, proxyURL, token str
 	return updateKubeconfig(func(config *model.Config) error {
 		authInfoName := authInfoName(contextName)
 		config.Clusters[contextName] = &model.Cluster{
-			Server:   apiURL,
-			ProxyURL: proxyURL,
+			Server:                   apiURL,
+			ProxyURL:                 proxyURL,
+			CertificateAuthorityData: caData,
 		}
 		config.Contexts[contextName] = &model.Context{
 			Cluster:  contextName,
