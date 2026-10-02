@@ -2,6 +2,8 @@ package kubeconfig_test
 
 import (
 	"bytes"
+	"fmt"
+	"os"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -53,6 +55,9 @@ func Test_FromClusters_Encode(t *testing.T) {
 		},
 	}, "socks5://localhost:12000", ""), &res))
 	resultJSON, err := yaml.YAMLToJSONStrict(res.Bytes())
+	require.NoError(t, err)
+
+	exe, err := os.Executable()
 	require.NoError(t, err)
 
 	expected := `{
@@ -119,12 +124,12 @@ func Test_FromClusters_Encode(t *testing.T) {
 				"exec": {
 					"apiVersion": "client.authentication.k8s.io/v1",
 					"args": [
-						"oidc-login",
+						"kubelogin",
 						"get-token",
 						"--oidc-issuer-url=https://my.keycloak.com/auth/realms/my-realm",
 						"--oidc-client-id=client_c-example-talos-3"
 					],
-					"command": "kubectl",
+					"command": "%s",
 					"env": null,
 					"interactiveMode": "Never",
 					"provideClusterInfo": false
@@ -140,7 +145,7 @@ func Test_FromClusters_Encode(t *testing.T) {
 	]
 }`
 
-	require.JSONEq(t, expected, string(resultJSON))
+	require.JSONEq(t, fmt.Sprintf(expected, exe), string(resultJSON))
 }
 
 func Test_FromClusters_CurrentContext(t *testing.T) {
