@@ -23,14 +23,30 @@ func Test_FromClusters_Encode(t *testing.T) {
 		},
 		{
 			ID: "c-test-1",
+			Facts: map[string]any{
+				"distribution": "openshift4",
+			},
 			DynamicFacts: map[string]any{
-				lieutenant.KnownDynamicFactOpenshiftApiURL: "https://api.c-test-1.vshnmanaged.net:6443",
+				"openshiftApiURL": "https://api.c-test-1.vshnmanaged.net:6443",
 			},
 		},
 		{
 			ID: "c-example-2",
+			Facts: map[string]any{
+				"distribution": "openshift4",
+			},
 			DynamicFacts: map[string]any{
-				lieutenant.KnownDynamicFactOpenshiftApiURL: "https://api.c-example-2.vshnmanaged.net:6443",
+				"openshiftApiURL": "https://api.c-example-2.vshnmanaged.net:6443",
+			},
+		},
+		{
+			ID: "c-example-talos-3",
+			Facts: map[string]any{
+				"distribution": "talos",
+			},
+			DynamicFacts: map[string]any{
+				"talosApiURL":                      "api.c-example-talos-3.vshnmanaged.net",
+				"talosAPICertificateAuthorityData": "Rk9PQkFSCg==",
 			},
 		},
 	}, "socks5://localhost:12000", ""), &res))
@@ -46,6 +62,14 @@ func Test_FromClusters_Encode(t *testing.T) {
 				"proxy-url": "socks5://localhost:12000"
 			},
 			"name": "c-example-2"
+		},
+		{
+			"cluster": {
+				"server": "https://api.c-example-talos-3.vshnmanaged.net:6443",
+				"proxy-url": "socks5://localhost:12000",
+				"certificate-authority-data": "Rk9PQkFSCg=="
+			},
+			"name": "c-example-talos-3"
 		},
 		{
 			"cluster": {
@@ -65,6 +89,13 @@ func Test_FromClusters_Encode(t *testing.T) {
 		},
 		{
 			"context": {
+				"cluster": "c-example-talos-3",
+				"user": "c-example-talos-3"
+			},
+			"name": "c-example-talos-3"
+		},
+		{
+			"context": {
 				"cluster": "c-test-1",
 				"user": "c-test-1"
 			},
@@ -79,6 +110,25 @@ func Test_FromClusters_Encode(t *testing.T) {
 			"user": {
 				"username": "anonymous"
 			}
+		},
+		{
+			"name": "c-example-talos-3",
+			"user": {
+				"exec": {
+					"apiVersion": "client.authentication.k8s.io/v1beta1",
+					"args": [
+						"oidc-login",
+						"get-token",
+						"--oidc-issuer-url=https://id.vshn.net/auth/realms/vshn-realm",
+						"--oidc-client-id=appuio-managed_c-example-talos-3",
+						"--oidc-extra-scope=email offline_access profile openid"
+					],
+					"command": "kubectl",
+					"env": null,
+					"interactiveMode": "IfAvailable",
+					"provideClusterInfo": false
+				}
+	        }
 		},
 		{
 			"name": "c-test-1",
@@ -106,7 +156,7 @@ func Test_FromClusters_CurrentContext(t *testing.T) {
 			{
 				ID: "c-example-2",
 				DynamicFacts: map[string]any{
-					lieutenant.KnownDynamicFactOpenshiftApiURL: "https://api.c-example-2.vshnmanaged.net:6443",
+					"openshiftApiURL": "https://api.c-example-2.vshnmanaged.net:6443",
 				},
 			},
 		}, "", "")
@@ -166,7 +216,7 @@ func Test_InsertConnectionInfoIntoKubeconfig(t *testing.T) {
 			td := t.TempDir()
 			kubeconfigPath := td + "/kubeconfig"
 			t.Setenv("KUBECONFIG", kubeconfigPath)
-			require.NoError(t, kubeconfig.InsertConnectionInfoIntoKubeconfig(tc.contextName, "https://api.test-cluster.vshnmanaged.net:6443", "socks5://localhost:12000", "test-token"))
+			require.NoError(t, kubeconfig.InsertConnectionInfoIntoKubeconfig(tc.contextName, "https://api.test-cluster.vshnmanaged.net:6443", "socks5://localhost:12000", "test-token", []byte("")))
 
 			kubeConfig, err := new(clientcmd.ClientConfigLoadingRules{ExplicitPath: kubeconfigPath}).Load()
 			require.NoError(t, err)

@@ -36,7 +36,7 @@ func Test_RunShell(t *testing.T) {
 		{
 			ID: "c-inventory-1",
 			DynamicFacts: map[string]any{
-				lieutenant.KnownDynamicFactOpenshiftApiURL: "https://api.cluster-inventory-1.example.com",
+				"openshiftApiURL": "https://api.cluster-inventory-1.example.com",
 			},
 		}, {
 			ID: "c-inventory-2",
@@ -44,13 +44,13 @@ func Test_RunShell(t *testing.T) {
 				"env": "prod",
 			},
 			DynamicFacts: map[string]any{
-				lieutenant.KnownDynamicFactOpenshiftApiURL: "https://api.cluster-inventory-2.example.com",
+				"openshiftApiURL": "https://api.cluster-inventory-2.example.com",
 			},
 		}, {
 			ID: "c-other-cluster",
 			DynamicFacts: map[string]any{
-				lieutenant.KnownDynamicFactOpenshiftApiURL: "https://api.cluster-other-cluster.example.com",
-				"huh": "ugh",
+				"openshiftApiURL": "https://api.cluster-other-cluster.example.com",
+				"huh":             "ugh",
 			},
 		},
 	}))

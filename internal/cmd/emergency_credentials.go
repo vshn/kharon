@@ -58,7 +58,7 @@ var emergencyCredentialsCmd = &cobra.Command{
 	RunE:    runEmergencyCredentials,
 	Args:    cobra.MaximumNArgs(1),
 	ValidArgsFunction: completion.ClusterID(clustersInventoryFile, true, func(cluster lieutenant.Cluster) bool {
-		api, _, _ := cluster.DynamicStringFact(lieutenant.KnownDynamicFactOpenshiftApiURL)
+		api, _, _ := cluster.GetApiURL()
 		return api != ""
 	}),
 }
@@ -96,7 +96,7 @@ func runEmergencyCredentials(cmd *cobra.Command, args []string) error {
 		}
 		cluster = c
 	}
-	apiURL, _, _ := cluster.DynamicStringFact(lieutenant.KnownDynamicFactOpenshiftApiURL)
+	apiURL, _, _ := cluster.GetApiURL()
 	if apiURL == "" {
 		return fmt.Errorf("cluster does not have a known API URL: %s", cluster.ID)
 	}
@@ -120,7 +120,8 @@ func runEmergencyCredentials(cmd *cobra.Command, args []string) error {
 
 	success := false
 	for i, token := range tokens {
-		err := kubeconfig.InsertConnectionInfoIntoKubeconfig(fmt.Sprintf("emergency-credentials/%d/%s", i, cluster.ID), apiURL, proxyAddrForKubeconfig(proxyAddr), token)
+		caData, _, _ := cluster.GetCAData()
+		err := kubeconfig.InsertConnectionInfoIntoKubeconfig(fmt.Sprintf("emergency-credentials/%d/%s", i, cluster.ID), apiURL, proxyAddrForKubeconfig(proxyAddr), token, caData)
 		if err != nil {
 			slog.Error("Error inserting credentials into kubeconfig", "error", err)
 		} else {

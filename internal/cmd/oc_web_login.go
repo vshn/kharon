@@ -56,7 +56,7 @@ var ocWebLoginCmd = &cobra.Command{
 	RunE:    runOCWebLogin,
 	Args:    cobra.MaximumNArgs(1),
 	ValidArgsFunction: completion.ClusterID(clustersInventoryFile, true, func(cluster lieutenant.Cluster) bool {
-		api, _, _ := cluster.DynamicStringFact(lieutenant.KnownDynamicFactOpenshiftApiURL)
+		api, _, _ := cluster.GetApiURL()
 		return api != ""
 	}),
 }
@@ -88,7 +88,7 @@ func loginWithClusterID(ctx context.Context, clusterID string) error {
 	if !found {
 		return fmt.Errorf("cluster %q not found", clusterID)
 	}
-	apiURL, _, _ := cluster.DynamicStringFact(lieutenant.KnownDynamicFactOpenshiftApiURL)
+	apiURL, _, _ := cluster.GetApiURL()
 	if apiURL == "" {
 		return fmt.Errorf("cluster %q does not have a known API URL", clusterID)
 	}
@@ -99,7 +99,7 @@ func loginWithClusterID(ctx context.Context, clusterID string) error {
 	if err != nil {
 		return fmt.Errorf("failed to request token: %w", err)
 	}
-	if err := kubeconfig.InsertConnectionInfoIntoKubeconfig(clusterID, apiURL, proxyAddrForKubeconfig(proxyAddr), tok); err != nil {
+	if err := kubeconfig.InsertConnectionInfoIntoKubeconfig(clusterID, apiURL, proxyAddrForKubeconfig(proxyAddr), tok, []byte("")); err != nil {
 		return fmt.Errorf("failed to insert connection info into kubeconfig: %w", err)
 	}
 	return nil
@@ -113,7 +113,7 @@ func loginWithURL(ctx context.Context, apiURL string) error {
 	if err != nil {
 		return fmt.Errorf("failed to request token: %w", err)
 	}
-	if err := kubeconfig.InsertConnectionInfoIntoKubeconfig("", apiURL, proxyAddrForKubeconfig(proxyAddr), tok); err != nil {
+	if err := kubeconfig.InsertConnectionInfoIntoKubeconfig("", apiURL, proxyAddrForKubeconfig(proxyAddr), tok, []byte("")); err != nil {
 		return fmt.Errorf("failed to insert connection info into kubeconfig: %w", err)
 	}
 	return nil
