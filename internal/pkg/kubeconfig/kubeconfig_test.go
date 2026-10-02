@@ -45,7 +45,7 @@ func Test_FromClusters_Encode(t *testing.T) {
 				"distribution": "talos",
 			},
 			DynamicFacts: map[string]any{
-				"talosApiURL": "api.c-example-talos-3.vshnmanaged.net",
+				"talosApiURL":                      "api.c-example-talos-3.vshnmanaged.net",
 				"talosAPICertificateAuthorityData": "Rk9PQkFSCg==",
 			},
 		},
