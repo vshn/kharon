@@ -62,7 +62,7 @@ func getAuthInfo(c lieutenant.Cluster) (*model.AuthInfo, error) {
 		}, nil
 	}
 
-	oidcIssuer, oidcClientPattern, _, err := c.GetOIDCInfo()
+	oidcIssuer, oidcClientId, _, err := c.GetOIDCInfo()
 	if err != nil {
 		return nil, fmt.Errorf("unable to retrieve OIDC parameters for cluster %s: %w", c.ID, err)
 	}
@@ -77,7 +77,7 @@ func getAuthInfo(c lieutenant.Cluster) (*model.AuthInfo, error) {
 				"oidc-login",
 				"get-token",
 				fmt.Sprintf("--oidc-issuer-url=%s", oidcIssuer),
-				fmt.Sprintf("--oidc-client-id=%s", fmt.Sprintf(oidcClientPattern, c.ID)),
+				fmt.Sprintf("--oidc-client-id=%s", oidcClientId),
 				"--oidc-extra-scope=email offline_access profile openid",
 			},
 		},

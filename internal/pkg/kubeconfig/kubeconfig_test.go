@@ -45,8 +45,10 @@ func Test_FromClusters_Encode(t *testing.T) {
 				"distribution": "talos",
 			},
 			DynamicFacts: map[string]any{
-				"talosApiURL":                      "api.c-example-talos-3.vshnmanaged.net",
+				"talosApiURL":                      "https://api.c-example-talos-3.vshnmanaged.net:6443",
 				"talosAPICertificateAuthorityData": "Rk9PQkFSCg==",
+				"oidcIssuer":                       "https://my.keycloak.com/auth/realms/my-realm",
+				"oidcClientId":                     "client_c-example-talos-3",
 			},
 		},
 	}, "socks5://localhost:12000", ""), &res))
@@ -119,8 +121,8 @@ func Test_FromClusters_Encode(t *testing.T) {
 					"args": [
 						"oidc-login",
 						"get-token",
-						"--oidc-issuer-url=https://id.vshn.net/auth/realms/vshn-realm",
-						"--oidc-client-id=appuio-managed_c-example-talos-3",
+						"--oidc-issuer-url=https://my.keycloak.com/auth/realms/my-realm",
+						"--oidc-client-id=client_c-example-talos-3",
 						"--oidc-extra-scope=email offline_access profile openid"
 					],
 					"command": "kubectl",

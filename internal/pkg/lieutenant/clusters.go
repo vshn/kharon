@@ -30,6 +30,9 @@ const (
 	knownDynamicFactTalosAppsDomain = "talosAppsDomain"
 	knownDynamicFactTalosCAData     = "talosAPICertificateAuthorityData"
 
+	knownDynamicFactOidcClientId = "oidcClientId"
+	knownDynamicFactOidcIssuer   = "oidcIssuer"
+
 	knownFactDistribution = "distribution"
 
 	KnownFactJumphost            = "jumphost"
@@ -71,12 +74,7 @@ func (c Cluster) GetApiURL() (string, bool, error) {
 	if ok || err != nil {
 		return val, ok, err
 	}
-	// Note(aa): The Talos API URL fact does not include schema and port, so we add it here for uniformity.
-	val, ok, err = c.DynamicStringFact(knownDynamicFactTalosApiURL)
-	if ok {
-		return fmt.Sprintf("https://%s:6443", val), ok, err
-	}
-	return val, ok, err
+	return c.DynamicStringFact(knownDynamicFactTalosApiURL)
 }
 
 func (c Cluster) GetConsoleURL() (string, bool, error) {
@@ -96,8 +94,21 @@ func (c Cluster) GetOIDCInfo() (string, string, bool, error) {
 	dist, ok, err := c.StringFact(knownFactDistribution)
 	switch dist {
 	case distributionTalos:
-		// TODO(aa): retrieve client ID from dynamic facts, retrieve issuer URL from Lieutenant
-		return "https://id.vshn.net/auth/realms/vshn-realm", "appuio-managed_%s", ok, err
+		client, ok, err := c.DynamicStringFact(knownDynamicFactOidcClientId)
+		if err != nil {
+			return "", "", false, fmt.Errorf("unable to determine OIDC client ID from fact for cluster %s: %w", c.ID, err)
+		}
+		if !ok {
+			return "", "", false, fmt.Errorf("cluster %s does not contain dynamic fact %s.", c.ID, knownDynamicFactOidcClientId)
+		}
+		issuer, ok, err := c.DynamicStringFact(knownDynamicFactOidcIssuer)
+		if err != nil {
+			return "", "", false, fmt.Errorf("unable to determine OIDC issuer from fact for cluster %s: %w", c.ID, err)
+		}
+		if !ok {
+			return "", "", false, fmt.Errorf("cluster %s does not contain dynamic fact %s.", c.ID, knownDynamicFactOidcIssuer)
+		}
+		return issuer, client, ok, err
 	default:
 		return "", "", ok, err
 	}
