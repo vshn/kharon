@@ -2,11 +2,13 @@ package cmd
 
 import (
 	"context"
+	"encoding/json/v2"
 	"fmt"
 	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
+	clientauthenticationv1beta1 "k8s.io/client-go/pkg/apis/clientauthentication/v1beta1"
 	"k8s.io/client-go/tools/clientcmd"
 
 	"github.com/vshn/kharon/internal/pkg/cache"
@@ -17,11 +19,13 @@ import (
 )
 
 var ocWebLoginIDP string
+var ocWebLoginExecCredential bool
 
 func init() {
 	RootCmd.AddCommand(ocWebLoginCmd)
 
 	flag := ocWebLoginCmd.Flags()
+	flag.BoolVar(&ocWebLoginExecCredential, "exec-credential", false, "Return token for use with the kubectl credential exec plugin.")
 	flag.StringVar(&clustersInventoryFile, "inventory-file", inventoryFilePath(), "Path to the inventory file that should be used by this command.")
 	flag.StringVar(&proxyAddr, "proxy-addr", defaultProxyAddr, "Address of the proxy to use in the generated kubeconfig file.")
 	flag.StringVar(&ocWebLoginIDP, "idp", "vshn-idp", "The name of the Identity Provider to use for login. If not specified, the user might be prompted to choose one on the OCP login page.")
@@ -106,8 +110,21 @@ func loginWithClusterID(ctx context.Context, clusterID string) error {
 	if err != nil {
 		return fmt.Errorf("failed to request token: %w", err)
 	}
-	if err := kubeconfig.InsertConnectionInfoIntoKubeconfig(clusterID, apiURL, proxyAddrForKubeconfig(proxyAddr), tok, []byte("")); err != nil {
-		return fmt.Errorf("failed to insert connection info into kubeconfig: %w", err)
+	if ocWebLoginExecCredential {
+		res := clientauthenticationv1beta1.ExecCredential{
+			APIVersion: "client.authentication.k8s.io/v1beta1",
+			Kind:       "ExecCredential",
+			Status: &clientauthenticationv1beta1.ExecCredentialStatus{
+				Token: tok,
+			},
+		}
+		if err := json.MarshalWrite(os.Stdout, res); err != nil {
+			return fmt.Errorf("failed to marshal exec credential: %w", err)
+		}
+	} else {
+		if err := kubeconfig.InsertConnectionInfoIntoKubeconfig(clusterID, apiURL, proxyAddrForKubeconfig(proxyAddr), tok, []byte("")); err != nil {
+			return fmt.Errorf("failed to insert connection info into kubeconfig: %w", err)
+		}
 	}
 	return nil
 }
