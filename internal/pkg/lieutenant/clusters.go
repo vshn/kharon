@@ -39,8 +39,8 @@ const (
 	KnownFactJumphostDomains     = "jumphostDomains"
 	KnownFactJumphostSkipDomains = "jumphostSkipDomains"
 
-	distributionOpenshift = "openshift4"
-	distributionTalos     = "talos"
+	DistributionOpenshift = "openshift4"
+	DistributionTalos     = "talos"
 )
 
 type Cluster struct {
@@ -69,6 +69,10 @@ func stringFactFrom(m map[string]any, factName string) (string, bool, error) {
 	return "", false, nil
 }
 
+func (c Cluster) Distribution() (string, bool, error) {
+	return c.StringFact(knownFactDistribution)
+}
+
 func (c Cluster) GetApiURL() (string, bool, error) {
 	val, ok, err := c.DynamicStringFact(knownDynamicFactOpenshiftApiURL)
 	if ok || err != nil {
@@ -77,53 +81,63 @@ func (c Cluster) GetApiURL() (string, bool, error) {
 	return c.DynamicStringFact(knownDynamicFactTalosApiURL)
 }
 
-func (c Cluster) GetConsoleURL() (string, bool, error) {
+func (c Cluster) ConsoleURL() (string, bool, error) {
 	return c.DynamicStringFact(knownDynamicFactOpenshiftConsoleURL)
 }
 
-func (c Cluster) GetCAData() ([]byte, bool, error) {
+func (c Cluster) CAData() ([]byte, bool, error) {
 	data, ok, err := c.DynamicStringFact(knownDynamicFactTalosCAData)
 	if err != nil {
-		return []byte(data), ok, err
+		return nil, ok, err
 	}
 	decoded, err := base64.StdEncoding.DecodeString(data)
 	return decoded, ok, err
 }
 
-func (c Cluster) GetOIDCInfo() (string, string, bool, error) {
+func (c Cluster) OIDCClientId() (string, bool, error) {
 	dist, ok, err := c.StringFact(knownFactDistribution)
 	switch dist {
-	case distributionTalos:
+	case DistributionTalos:
 		client, ok, err := c.DynamicStringFact(knownDynamicFactOidcClientId)
 		if err != nil {
-			return "", "", false, fmt.Errorf("unable to determine OIDC client ID from fact for cluster %s: %w", c.ID, err)
+			return "", false, fmt.Errorf("unable to determine OIDC client ID from fact for cluster %s: %w", c.ID, err)
 		}
 		if !ok {
-			return "", "", false, fmt.Errorf("cluster %s does not contain dynamic fact %s.", c.ID, knownDynamicFactOidcClientId)
+			return "", false, fmt.Errorf("cluster %s does not contain dynamic fact %s.", c.ID, knownDynamicFactOidcClientId)
 		}
-		issuer, ok, err := c.DynamicStringFact(knownDynamicFactOidcIssuer)
-		if err != nil {
-			return "", "", false, fmt.Errorf("unable to determine OIDC issuer from fact for cluster %s: %w", c.ID, err)
-		}
-		if !ok {
-			return "", "", false, fmt.Errorf("cluster %s does not contain dynamic fact %s.", c.ID, knownDynamicFactOidcIssuer)
-		}
-		return issuer, client, ok, err
+		return client, ok, err
 	default:
-		return "", "", ok, err
+		return "", ok, err
 	}
 }
 
-func (c Cluster) GetClusterDomains() (string, []string, error) {
+func (c Cluster) OIDCIssuer() (string, bool, error) {
+	dist, ok, err := c.StringFact(knownFactDistribution)
+	switch dist {
+	case DistributionTalos:
+		issuer, ok, err := c.DynamicStringFact(knownDynamicFactOidcIssuer)
+		if err != nil {
+			return "", false, fmt.Errorf("unable to determine OIDC issuer from fact for cluster %s: %w", c.ID, err)
+		}
+		if !ok {
+			return "", false, fmt.Errorf("cluster %s does not contain dynamic fact %s.", c.ID, knownDynamicFactOidcIssuer)
+		}
+		return issuer, ok, err
+	default:
+		return "", ok, err
+	}
+}
+
+func (c Cluster) ClusterDomains() (string, []string, error) {
 	var domains []string
 	var errs []error
 	var baseDomainFact string
 	var extraDomainFacts []string
 	var extraUrlFacts []string
 
-	dist, _, _ := c.StringFact(knownFactDistribution)
+	dist, _, _ := c.Distribution()
 	switch dist {
-	case distributionOpenshift:
+	case DistributionOpenshift:
 		baseDomainFact = knownDynamicFactOpenshiftBaseDomain
 		extraDomainFacts = []string{
 			knownDynamicFactOpenshiftAppsDomain,
@@ -132,7 +146,7 @@ func (c Cluster) GetClusterDomains() (string, []string, error) {
 			knownDynamicFactOpenshiftApiURL,
 			knownDynamicFactOpenshiftConsoleURL,
 		}
-	case distributionTalos:
+	case DistributionTalos:
 		baseDomainFact = knownDynamicFactTalosBaseDomain
 		extraDomainFacts = []string{
 			knownDynamicFactTalosAppsDomain,
@@ -173,7 +187,7 @@ func (c Cluster) GetClusterDomains() (string, []string, error) {
 
 func (c Cluster) UseOIDC() bool {
 	dist, _, _ := c.StringFact(knownFactDistribution)
-	return dist == distributionTalos
+	return dist == DistributionTalos
 }
 
 func hasBaseDomain(domain, base string) bool {
@@ -206,7 +220,7 @@ func NewClient(apiURL string, httpClient *http.Client) *Client {
 	}
 }
 
-func (c *Client) GetClusters(ctx context.Context) ([]Cluster, error) {
+func (c *Client) Clusters(ctx context.Context) ([]Cluster, error) {
 	res, err := c.httpClient.Get(c.apiURL + "/clusters")
 	if err != nil {
 		return nil, err

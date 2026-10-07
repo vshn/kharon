@@ -20,6 +20,9 @@ func Test_JumphostMappingFromClusters(t *testing.T) {
 			name: "no jumphost",
 			cluster: lieutenant.Cluster{
 				ID: "cluster-1",
+				Facts: map[string]any{
+					"distribution": "openshift4",
+				},
 			},
 			want: mapping.JumphostMapping{
 				DomainToJumphost: map[string]string{},
@@ -28,6 +31,9 @@ func Test_JumphostMappingFromClusters(t *testing.T) {
 			name: "no jumphost",
 			cluster: lieutenant.Cluster{
 				ID: "cluster-1",
+				Facts: map[string]any{
+					"distribution": "openshift4",
+				},
 				DynamicFacts: map[string]any{
 					"openshiftBaseDomain": "example.com",
 				},

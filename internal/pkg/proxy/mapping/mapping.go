@@ -44,7 +44,7 @@ func JumphostMappingFromClusters(clusters []lieutenant.Cluster) (JumphostMapping
 			}
 		}
 
-		baseDomain, clusterDomains, err := c.GetClusterDomains()
+		baseDomain, clusterDomains, err := c.ClusterDomains()
 		if err != nil {
 			errs = append(errs, fmt.Errorf("failed to get all cluster domains for cluster %s: %w", c.ID, err))
 		}

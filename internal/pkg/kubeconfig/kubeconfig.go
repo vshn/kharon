@@ -34,7 +34,7 @@ func FromClusters(clusters []lieutenant.Cluster, proxyURL, currentContext string
 		}
 		clusterName := c.ID
 		contextName := c.ID
-		caData, _, _ := c.GetCAData()
+		caData, _, _ := c.CAData()
 		authInfo, _ := getAuthInfo(c)
 		kc.Clusters[clusterName] = &model.Cluster{
 			Server:                   api,
@@ -62,9 +62,13 @@ func getAuthInfo(c lieutenant.Cluster) (*model.AuthInfo, error) {
 		}, nil
 	}
 
-	oidcIssuer, oidcClientId, _, err := c.GetOIDCInfo()
+	oidcClientId, _, err := c.OIDCClientId()
 	if err != nil {
-		return nil, fmt.Errorf("unable to retrieve OIDC parameters for cluster %s: %w", c.ID, err)
+		return nil, fmt.Errorf("unable to retrieve OIDC client for cluster %s: %w", c.ID, err)
+	}
+	oidcIssuer, _, err := c.OIDCIssuer()
+	if err != nil {
+		return nil, fmt.Errorf("unable to retrieve OIDC issuer for cluster %s: %w", c.ID, err)
 	}
 
 	return &model.AuthInfo{

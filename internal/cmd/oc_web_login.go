@@ -92,6 +92,13 @@ func loginWithClusterID(ctx context.Context, clusterID string) error {
 	if apiURL == "" {
 		return fmt.Errorf("cluster %q does not have a known API URL", clusterID)
 	}
+	if dist, ok, err := cluster.Distribution(); err != nil {
+		return fmt.Errorf("failed to get distribution for cluster: %w", err)
+	} else if !ok {
+		return fmt.Errorf("cluster has no distribution fact")
+	} else if dist != lieutenant.DistributionOpenshift {
+		return fmt.Errorf("expected openshift cluster, got: %s", dist)
+	}
 	if err := setProxyEnv(proxyAddrForShell(proxyAddr)); err != nil {
 		return fmt.Errorf("failed to set proxy environment variables: %w", err)
 	}

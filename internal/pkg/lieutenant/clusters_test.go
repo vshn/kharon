@@ -32,13 +32,13 @@ func Test_Client_GetClusters(t *testing.T) {
 	defer s.Close()
 
 	client := NewClient(s.URL, http.DefaultClient)
-	c, err := client.GetClusters(t.Context())
+	c, err := client.Clusters(t.Context())
 	require.NoError(t, err)
 	require.Len(t, c, 1)
 	require.Equal(t, "cluster-1", c[0].ID)
 
 	errResponse.Store(new("ran out of clusters"))
-	_, err = client.GetClusters(t.Context())
+	_, err = client.Clusters(t.Context())
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "500")
 	require.Contains(t, err.Error(), "ran out of clusters")

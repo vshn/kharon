@@ -120,7 +120,7 @@ func runEmergencyCredentials(cmd *cobra.Command, args []string) error {
 
 	success := false
 	for i, token := range tokens {
-		caData, _, _ := cluster.GetCAData()
+		caData, _, _ := cluster.CAData()
 		err := kubeconfig.InsertConnectionInfoIntoKubeconfig(fmt.Sprintf("emergency-credentials/%d/%s", i, cluster.ID), apiURL, proxyAddrForKubeconfig(proxyAddr), token, caData)
 		if err != nil {
 			slog.Error("Error inserting credentials into kubeconfig", "error", err)

@@ -73,7 +73,7 @@ func TestClusters(r RoutingDialer, clusters []lieutenant.Cluster) iter.Seq[Repor
 				}
 				continue
 			}
-			if consoleURL, _, _ := cluster.GetConsoleURL(); consoleURL != "" {
+			if consoleURL, _, _ := cluster.ConsoleURL(); consoleURL != "" {
 				report.ConsoleURL = consoleURL
 				report.ConsoleConnectionErr = get(client, consoleURL)
 			}
