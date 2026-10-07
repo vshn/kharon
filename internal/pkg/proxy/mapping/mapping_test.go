@@ -216,7 +216,7 @@ func Test_JumphostMappingFromClusters(t *testing.T) {
 			cluster: lieutenant.Cluster{
 				ID: "cluster-1",
 				Facts: map[string]any{
-					"distribution":               "openshift4",
+					"distribution":               "oke",
 					lieutenant.KnownFactJumphost: "jumphost-1",
 				},
 				DynamicFacts: map[string]any{

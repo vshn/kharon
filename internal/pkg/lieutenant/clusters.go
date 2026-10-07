@@ -39,7 +39,7 @@ const (
 	KnownFactJumphostDomains     = "jumphostDomains"
 	KnownFactJumphostSkipDomains = "jumphostSkipDomains"
 
-	DistributionOpenshift = "openshift4"
+	DistributionOpenshift = "openshift"
 	DistributionTalos     = "talos"
 )
 
@@ -70,7 +70,14 @@ func stringFactFrom(m map[string]any, factName string) (string, bool, error) {
 }
 
 func (c Cluster) Distribution() (string, bool, error) {
-	return c.StringFact(knownFactDistribution)
+	dist, ok, err := c.StringFact(knownFactDistribution)
+	if err != nil {
+		return dist, ok, err
+	}
+	if dist == "oke" || dist == "openshift4" {
+		return DistributionOpenshift, ok, err
+	}
+	return dist, ok, err
 }
 
 func (c Cluster) GetApiURL() (string, bool, error) {
@@ -95,7 +102,7 @@ func (c Cluster) CAData() ([]byte, bool, error) {
 }
 
 func (c Cluster) OIDCClientId() (string, bool, error) {
-	dist, ok, err := c.StringFact(knownFactDistribution)
+	dist, ok, err := c.Distribution()
 	switch dist {
 	case DistributionTalos:
 		client, ok, err := c.DynamicStringFact(knownDynamicFactOidcClientId)
@@ -112,7 +119,7 @@ func (c Cluster) OIDCClientId() (string, bool, error) {
 }
 
 func (c Cluster) OIDCIssuer() (string, bool, error) {
-	dist, ok, err := c.StringFact(knownFactDistribution)
+	dist, ok, err := c.Distribution()
 	switch dist {
 	case DistributionTalos:
 		issuer, ok, err := c.DynamicStringFact(knownDynamicFactOidcIssuer)
@@ -186,7 +193,7 @@ func (c Cluster) ClusterDomains() (string, []string, error) {
 }
 
 func (c Cluster) UseOIDC() bool {
-	dist, _, _ := c.StringFact(knownFactDistribution)
+	dist, _, _ := c.Distribution()
 	return dist == DistributionTalos
 }
 
