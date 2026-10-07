@@ -118,6 +118,8 @@ func requestToken(ctx context.Context, apiURL, idp string) (string, time.Time, e
 			q.Set("idp", idp)
 			url.RawQuery = q.Encode()
 		}
+		// TODO(bastjan) All output on Stderr to not interfere with token output.
+		// Branch `integrate-kubelogin` already has preparation for that.
 		return browser.OpenURL(ctx, url.String())
 	}, 0)
 	if err != nil {
