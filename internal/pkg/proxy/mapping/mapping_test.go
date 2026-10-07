@@ -20,6 +20,9 @@ func Test_JumphostMappingFromClusters(t *testing.T) {
 			name: "no jumphost",
 			cluster: lieutenant.Cluster{
 				ID: "cluster-1",
+				Facts: map[string]any{
+					"distribution": "openshift4",
+				},
 			},
 			want: mapping.JumphostMapping{
 				DomainToJumphost: map[string]string{},
@@ -28,8 +31,11 @@ func Test_JumphostMappingFromClusters(t *testing.T) {
 			name: "no jumphost",
 			cluster: lieutenant.Cluster{
 				ID: "cluster-1",
+				Facts: map[string]any{
+					"distribution": "openshift4",
+				},
 				DynamicFacts: map[string]any{
-					lieutenant.KnownDynamicFactOpenshiftBaseDomain: "example.com",
+					"openshiftBaseDomain": "example.com",
 				},
 			},
 			want: mapping.JumphostMapping{
@@ -40,10 +46,28 @@ func Test_JumphostMappingFromClusters(t *testing.T) {
 			cluster: lieutenant.Cluster{
 				ID: "cluster-1",
 				Facts: map[string]any{
+					"distribution":               "openshift4",
 					lieutenant.KnownFactJumphost: "jumphost-1",
 				},
 				DynamicFacts: map[string]any{
-					lieutenant.KnownDynamicFactOpenshiftBaseDomain: "example.com",
+					"openshiftBaseDomain": "example.com",
+				},
+			},
+			want: mapping.JumphostMapping{
+				DomainToJumphost: map[string]string{"example.com": "jumphost-1"},
+			},
+		}, {
+			name: "Talos jumphost config",
+			cluster: lieutenant.Cluster{
+				ID: "cluster-1",
+				Facts: map[string]any{
+					"distribution":               "talos",
+					lieutenant.KnownFactJumphost: "jumphost-1",
+				},
+				DynamicFacts: map[string]any{
+					"talosBaseDomain": "example.com",
+					"talosAppsDomain": "apps.example.com",
+					"talosApiURL":     "api.example.com",
 				},
 			},
 			want: mapping.JumphostMapping{
@@ -54,13 +78,14 @@ func Test_JumphostMappingFromClusters(t *testing.T) {
 			cluster: lieutenant.Cluster{
 				ID: "cluster-1",
 				Facts: map[string]any{
+					"distribution":               "openshift4",
 					lieutenant.KnownFactJumphost: "jumphost-1",
 				},
 				DynamicFacts: map[string]any{
-					lieutenant.KnownDynamicFactOpenshiftBaseDomain: "example.com",
-					lieutenant.KnownDynamicFactOpenshiftAppsDomain: "apps.example.com",
-					lieutenant.KnownDynamicFactOpenshiftApiURL:     "https://api.example.com:6443",
-					lieutenant.KnownDynamicFactOpenshiftConsoleURL: "https://console.example.com",
+					"openshiftBaseDomain": "example.com",
+					"openshiftAppsDomain": "apps.example.com",
+					"openshiftApiURL":     "https://api.example.com:6443",
+					"openshiftConsoleURL": "https://console.example.com",
 				},
 			},
 			want: mapping.JumphostMapping{
@@ -71,13 +96,14 @@ func Test_JumphostMappingFromClusters(t *testing.T) {
 			cluster: lieutenant.Cluster{
 				ID: "cluster-1",
 				Facts: map[string]any{
+					"distribution":               "openshift4",
 					lieutenant.KnownFactJumphost: "jumphost-1",
 				},
 				DynamicFacts: map[string]any{
-					lieutenant.KnownDynamicFactOpenshiftBaseDomain: "example.com",
-					lieutenant.KnownDynamicFactOpenshiftAppsDomain: "apps.different.com",
-					lieutenant.KnownDynamicFactOpenshiftApiURL:     "https://api.different.com:6443",
-					lieutenant.KnownDynamicFactOpenshiftConsoleURL: "https://console.different.com",
+					"openshiftBaseDomain": "example.com",
+					"openshiftAppsDomain": "apps.different.com",
+					"openshiftApiURL":     "https://api.different.com:6443",
+					"openshiftConsoleURL": "https://console.different.com",
 				},
 			},
 			want: mapping.JumphostMapping{
@@ -93,11 +119,12 @@ func Test_JumphostMappingFromClusters(t *testing.T) {
 			cluster: lieutenant.Cluster{
 				ID: "cluster-1",
 				Facts: map[string]any{
+					"distribution":                      "openshift4",
 					lieutenant.KnownFactJumphost:        "jumphost-1",
 					lieutenant.KnownFactJumphostDomains: "additional.com, sub.example.com , blub.com ",
 				},
 				DynamicFacts: map[string]any{
-					lieutenant.KnownDynamicFactOpenshiftBaseDomain: "example.com",
+					"openshiftBaseDomain": "example.com",
 				},
 			},
 			want: mapping.JumphostMapping{
@@ -112,11 +139,12 @@ func Test_JumphostMappingFromClusters(t *testing.T) {
 			cluster: lieutenant.Cluster{
 				ID: "cluster-1",
 				Facts: map[string]any{
+					"distribution":                          "openshift4",
 					lieutenant.KnownFactJumphost:            "jumphost-1",
 					lieutenant.KnownFactJumphostSkipDomains: "additional.com, sub.example.com , blub.com ",
 				},
 				DynamicFacts: map[string]any{
-					lieutenant.KnownDynamicFactOpenshiftBaseDomain: "example.com",
+					"openshiftBaseDomain": "example.com",
 				},
 			},
 			want: mapping.JumphostMapping{
@@ -134,12 +162,13 @@ func Test_JumphostMappingFromClusters(t *testing.T) {
 			cluster: lieutenant.Cluster{
 				ID: "cluster-1",
 				Facts: map[string]any{
+					"distribution":               "openshift4",
 					lieutenant.KnownFactJumphost: "jumphost-1",
 				},
 				DynamicFacts: map[string]any{
-					lieutenant.KnownDynamicFactOpenshiftBaseDomain: "example.com",
-					lieutenant.KnownDynamicFactOpenshiftApiURL:     "://invalid-url",
-					lieutenant.KnownDynamicFactOpenshiftConsoleURL: "://invalid-url",
+					"openshiftBaseDomain": "example.com",
+					"openshiftApiURL":     "://invalid-url",
+					"openshiftConsoleURL": "://invalid-url",
 				},
 			},
 			want: mapping.JumphostMapping{
@@ -153,10 +182,11 @@ func Test_JumphostMappingFromClusters(t *testing.T) {
 			cluster: lieutenant.Cluster{
 				ID: "cluster-1",
 				Facts: map[string]any{
+					"distribution":               "openshift4",
 					lieutenant.KnownFactJumphost: "jumphost-1",
 				},
 				DynamicFacts: map[string]any{
-					lieutenant.KnownDynamicFactOpenshiftApiURL: "https://api.example.com:6443",
+					"openshiftApiURL": "https://api.example.com:6443",
 				},
 			},
 			want: mapping.JumphostMapping{
@@ -164,16 +194,17 @@ func Test_JumphostMappingFromClusters(t *testing.T) {
 					"api.example.com": "jumphost-1",
 				},
 			},
-			wantErr: "no openshiftBaseDomain",
+			wantErr: "no base domain",
 		}, {
 			name: "invalid jumphost fact",
 			cluster: lieutenant.Cluster{
 				ID: "cluster-1",
 				Facts: map[string]any{
+					"distribution":               "openshift4",
 					lieutenant.KnownFactJumphost: 1,
 				},
 				DynamicFacts: map[string]any{
-					lieutenant.KnownDynamicFactOpenshiftBaseDomain: "example.com",
+					"openshiftBaseDomain": "example.com",
 				},
 			},
 			want: mapping.JumphostMapping{
@@ -185,11 +216,12 @@ func Test_JumphostMappingFromClusters(t *testing.T) {
 			cluster: lieutenant.Cluster{
 				ID: "cluster-1",
 				Facts: map[string]any{
+					"distribution":               "oke",
 					lieutenant.KnownFactJumphost: "jumphost-1",
 				},
 				DynamicFacts: map[string]any{
-					lieutenant.KnownDynamicFactOpenshiftBaseDomain: 1,
-					lieutenant.KnownDynamicFactOpenshiftApiURL:     "https://api.example.com:6443",
+					"openshiftBaseDomain": 1,
+					"openshiftApiURL":     "https://api.example.com:6443",
 				},
 			},
 			want: mapping.JumphostMapping{
@@ -203,11 +235,12 @@ func Test_JumphostMappingFromClusters(t *testing.T) {
 			cluster: lieutenant.Cluster{
 				ID: "cluster-1",
 				Facts: map[string]any{
+					"distribution":               "openshift4",
 					lieutenant.KnownFactJumphost: "jumphost-1",
 				},
 				DynamicFacts: map[string]any{
-					lieutenant.KnownDynamicFactOpenshiftBaseDomain: "example.com",
-					lieutenant.KnownDynamicFactOpenshiftApiURL:     1,
+					"openshiftBaseDomain": "example.com",
+					"openshiftApiURL":     1,
 				},
 			},
 			want: mapping.JumphostMapping{

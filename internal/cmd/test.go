@@ -53,7 +53,7 @@ var testCmd = &cobra.Command{
 	Example: testCmdExample,
 	Run:     runTest,
 	ValidArgsFunction: completion.ClusterID(clustersInventoryFile, false, func(cluster lieutenant.Cluster) bool {
-		api, _, _ := cluster.DynamicStringFact(lieutenant.KnownDynamicFactOpenshiftApiURL)
+		api, _, _ := cluster.GetApiURL()
 		return api != ""
 	}),
 }

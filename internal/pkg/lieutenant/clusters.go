@@ -2,28 +2,45 @@ package lieutenant
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"slices"
+	"strings"
 
 	"github.com/minio/pkg/v3/wildcard"
+	"go.uber.org/multierr"
 	"k8s.io/apimachinery/pkg/labels"
 
 	"github.com/vshn/kharon/internal/pkg/lieutenant/login"
 )
 
 const (
-	KnownDynamicFactOpenshiftApiURL     = "openshiftApiURL"
-	KnownDynamicFactOpenshiftConsoleURL = "openshiftConsoleURL"
-	KnownDynamicFactOpenshiftBaseDomain = "openshiftBaseDomain"
-	KnownDynamicFactOpenshiftAppsDomain = "openshiftAppsDomain"
+	knownDynamicFactOpenshiftApiURL     = "openshiftApiURL"
+	knownDynamicFactOpenshiftConsoleURL = "openshiftConsoleURL"
+	knownDynamicFactOpenshiftBaseDomain = "openshiftBaseDomain"
+	knownDynamicFactOpenshiftAppsDomain = "openshiftAppsDomain"
+
+	knownDynamicFactTalosApiURL     = "talosApiURL"
+	knownDynamicFactTalosBaseDomain = "talosBaseDomain"
+	knownDynamicFactTalosAppsDomain = "talosAppsDomain"
+	knownDynamicFactTalosCAData     = "talosAPICertificateAuthorityData"
+
+	knownDynamicFactOidcClientId = "oidcClientId"
+	knownDynamicFactOidcIssuer   = "oidcIssuer"
+
+	knownFactDistribution = "distribution"
 
 	KnownFactJumphost            = "jumphost"
 	KnownFactJumphostDomains     = "jumphostDomains"
 	KnownFactJumphostSkipDomains = "jumphostSkipDomains"
+
+	DistributionOpenshift = "openshift"
+	DistributionTalos     = "talos"
 )
 
 type Cluster struct {
@@ -52,6 +69,145 @@ func stringFactFrom(m map[string]any, factName string) (string, bool, error) {
 	return "", false, nil
 }
 
+func (c Cluster) Distribution() (string, bool, error) {
+	dist, ok, err := c.StringFact(knownFactDistribution)
+	if err != nil {
+		return dist, ok, err
+	}
+	if dist == "oke" || dist == "openshift4" {
+		return DistributionOpenshift, ok, err
+	}
+	return dist, ok, err
+}
+
+func (c Cluster) GetApiURL() (string, bool, error) {
+	val, ok, err := c.DynamicStringFact(knownDynamicFactOpenshiftApiURL)
+	if ok || err != nil {
+		return val, ok, err
+	}
+	return c.DynamicStringFact(knownDynamicFactTalosApiURL)
+}
+
+func (c Cluster) ConsoleURL() (string, bool, error) {
+	return c.DynamicStringFact(knownDynamicFactOpenshiftConsoleURL)
+}
+
+func (c Cluster) CAData() ([]byte, bool, error) {
+	data, ok, err := c.DynamicStringFact(knownDynamicFactTalosCAData)
+	if err != nil {
+		return nil, ok, err
+	}
+	decoded, err := base64.StdEncoding.DecodeString(data)
+	return decoded, ok, err
+}
+
+func (c Cluster) OIDCClientId() (string, bool, error) {
+	dist, ok, err := c.Distribution()
+	switch dist {
+	case DistributionTalos:
+		client, ok, err := c.DynamicStringFact(knownDynamicFactOidcClientId)
+		if err != nil {
+			return "", false, fmt.Errorf("unable to determine OIDC client ID from fact for cluster %s: %w", c.ID, err)
+		}
+		if !ok {
+			return "", false, fmt.Errorf("cluster %s does not contain dynamic fact %s.", c.ID, knownDynamicFactOidcClientId)
+		}
+		return client, ok, err
+	default:
+		return "", ok, err
+	}
+}
+
+func (c Cluster) OIDCIssuer() (string, bool, error) {
+	dist, ok, err := c.Distribution()
+	switch dist {
+	case DistributionTalos:
+		issuer, ok, err := c.DynamicStringFact(knownDynamicFactOidcIssuer)
+		if err != nil {
+			return "", false, fmt.Errorf("unable to determine OIDC issuer from fact for cluster %s: %w", c.ID, err)
+		}
+		if !ok {
+			return "", false, fmt.Errorf("cluster %s does not contain dynamic fact %s.", c.ID, knownDynamicFactOidcIssuer)
+		}
+		return issuer, ok, err
+	default:
+		return "", ok, err
+	}
+}
+
+// ClusterDomains returns all domains associated with a cluster, including the base domain and
+// any domains that are part of the API URL, Apps domain, console URL, and any others.
+// The base domain is returned separately for convenience.
+// If errors occur while gathering domains, the result may be incomplete.
+func (c Cluster) ClusterDomains() (baseDomain string, additionalDomains []string, err error) {
+	var domains []string
+	var errs []error
+	var baseDomainFact string
+	var extraDomainFacts []string
+	var extraUrlFacts []string
+
+	dist, _, _ := c.Distribution()
+	switch dist {
+	case DistributionOpenshift:
+		baseDomainFact = knownDynamicFactOpenshiftBaseDomain
+		extraDomainFacts = []string{
+			knownDynamicFactOpenshiftAppsDomain,
+		}
+		extraUrlFacts = []string{
+			knownDynamicFactOpenshiftApiURL,
+			knownDynamicFactOpenshiftConsoleURL,
+		}
+	case DistributionTalos:
+		baseDomainFact = knownDynamicFactTalosBaseDomain
+		extraDomainFacts = []string{
+			knownDynamicFactTalosAppsDomain,
+		}
+		extraUrlFacts = []string{
+			knownDynamicFactTalosApiURL,
+		}
+	default:
+		return "", []string{}, nil
+	}
+	base, _, err := c.DynamicStringFact(baseDomainFact)
+	if err != nil {
+		errs = append(errs, fmt.Errorf("failed to get base domain dynamic fact for cluster %s: %w", c.ID, err))
+	}
+
+	for _, extraDomainFact := range extraDomainFacts {
+		if extraDomain, _, err := c.DynamicStringFact(extraDomainFact); err != nil {
+			errs = append(errs, fmt.Errorf("failed to get %s dynamic fact for cluster %s: %w", extraDomainFact, c.ID, err))
+		} else if extraDomain != "" && !hasBaseDomain(extraDomain, base) {
+			domains = append(domains, extraDomain)
+		}
+	}
+	for _, extraUrlFact := range extraUrlFacts {
+		if extraUrl, _, err := c.DynamicStringFact(extraUrlFact); err != nil {
+			errs = append(errs, fmt.Errorf("failed to get %s dynamic fact for cluster %s: %w", extraUrlFact, c.ID, err))
+		} else if extraUrl != "" {
+			u, err := url.Parse(extraUrl)
+			if err != nil {
+				errs = append(errs, fmt.Errorf("failed to parse %s dynamic fact for cluster %s: %w", extraUrlFact, c.ID, err))
+			} else if domain := u.Hostname(); domain != "" && !hasBaseDomain(domain, base) {
+				domains = append(domains, domain)
+			}
+		}
+	}
+	return base, domains, multierr.Combine(errs...)
+
+}
+
+func (c Cluster) UseOIDC() bool {
+	dist, _, _ := c.Distribution()
+	return dist == DistributionTalos
+}
+
+func hasBaseDomain(domain, base string) bool {
+	if base == "" {
+		return false
+	}
+	return domain == base || strings.HasSuffix(domain, "."+base)
+}
+
 type Client struct {
 	apiURL     string
 	httpClient *http.Client
@@ -75,7 +231,7 @@ func NewClient(apiURL string, httpClient *http.Client) *Client {
 	}
 }
 
-func (c *Client) GetClusters(ctx context.Context) ([]Cluster, error) {
+func (c *Client) Clusters(ctx context.Context) ([]Cluster, error) {
 	res, err := c.httpClient.Get(c.apiURL + "/clusters")
 	if err != nil {
 		return nil, err
@@ -110,7 +266,7 @@ func FindByID(clusters []Cluster, id string) (Cluster, bool) {
 // FindByAPIURL searches for a cluster with the given OpenShift API URL in the provided slice of clusters.
 func FindByAPIURL(clusters []Cluster, apiURL string) (Cluster, bool) {
 	for _, cluster := range clusters {
-		if url, ok, _ := cluster.DynamicStringFact(KnownDynamicFactOpenshiftApiURL); ok && url == apiURL {
+		if url, ok, _ := cluster.GetApiURL(); ok && url == apiURL {
 			return cluster, true
 		}
 	}

@@ -1,8 +1,10 @@
 package kubeconfig
 
 import (
+	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"regexp"
 	"strings"
 
@@ -20,7 +22,6 @@ type Config = model.Config
 // The functions does not validate that the provided currentContext actually exists.
 // If not provided, the first cluster with a valid API URL will be set as the current context.
 func FromClusters(clusters []lieutenant.Cluster, proxyURL, currentContext string) *Config {
-	const authInfoName = "anonymous"
 
 	kc := model.NewConfig()
 	currentContextSet := false
@@ -29,29 +30,76 @@ func FromClusters(clusters []lieutenant.Cluster, proxyURL, currentContext string
 		currentContextSet = true
 	}
 	for _, c := range clusters {
-		api, _, _ := c.DynamicStringFact(lieutenant.KnownDynamicFactOpenshiftApiURL)
+		api, _, _ := c.GetApiURL()
 		if api == "" {
 			continue
 		}
 		clusterName := c.ID
 		contextName := c.ID
+		caData, _, err := c.CAData()
+		if err != nil {
+			slog.Warn("Failed to retrieve CA data, possibly malformed", "id", c.ID, "error", err)
+		}
+		authInfo, err := getAuthInfo(c)
+		if err != nil {
+			slog.Warn("Failed to build AuthInfo for cluster", "id", c.ID, "error", err)
+			continue
+		}
 		kc.Clusters[clusterName] = &model.Cluster{
-			Server:   api,
-			ProxyURL: proxyURL,
+			Server:                   api,
+			ProxyURL:                 proxyURL,
+			CertificateAuthorityData: caData,
 		}
 		kc.Contexts[contextName] = &model.Context{
 			Cluster:  clusterName,
 			AuthInfo: clusterName,
 		}
-		kc.AuthInfos[clusterName] = &model.AuthInfo{
-			Username: authInfoName,
-		}
+		kc.AuthInfos[clusterName] = authInfo
 		if !currentContextSet {
 			kc.CurrentContext = contextName
 			currentContextSet = true
 		}
 	}
 	return kc
+}
+
+func getAuthInfo(c lieutenant.Cluster) (*model.AuthInfo, error) {
+	const authInfoName = "anonymous"
+	if !c.UseOIDC() {
+		return &model.AuthInfo{
+			Username: authInfoName,
+		}, nil
+	}
+
+	oidcClientId, ok, err := c.OIDCClientId()
+	if err != nil || !ok {
+		if err == nil {
+			err = errors.New("cluster has no OIDC client id fact")
+		}
+		return nil, fmt.Errorf("unable to retrieve OIDC client id for cluster %s: %w", c.ID, err)
+	}
+	oidcIssuer, ok, err := c.OIDCIssuer()
+	if err != nil || !ok {
+		if err == nil {
+			err = errors.New("cluster has no OIDC issuer fact")
+		}
+		return nil, fmt.Errorf("unable to retrieve OIDC issuer for cluster %s: %w", c.ID, err)
+	}
+
+	return &model.AuthInfo{
+		Exec: &model.ExecConfig{
+			Command:            "kubectl",
+			APIVersion:         "client.authentication.k8s.io/v1",
+			InteractiveMode:    model.NeverExecInteractiveMode,
+			ProvideClusterInfo: false,
+			Args: []string{
+				"oidc-login",
+				"get-token",
+				fmt.Sprintf("--oidc-issuer-url=%s", oidcIssuer),
+				fmt.Sprintf("--oidc-client-id=%s", oidcClientId),
+			},
+		},
+	}, nil
 }
 
 // Encode encodes the given kubeconfig Config object to the provided writer in YAML format.
@@ -89,7 +137,7 @@ var urlToContextReplacementRegex = regexp.MustCompile(`[^a-zA-Z0-9:]`)
 
 // InsertConnectionInfoIntoKubeconfig inserts a new cluster, context, and auth info into the kubeconfig for the given context name, API URL, proxy URL, and token.
 // If contextName is empty, a context name will be generated from the API URL by removing the protocol and replacing non-alphanumeric characters with dashes.
-func InsertConnectionInfoIntoKubeconfig(contextName, apiURL, proxyURL, token string) error {
+func InsertConnectionInfoIntoKubeconfig(contextName, apiURL, proxyURL, token string, caData []byte) error {
 	if contextName == "" {
 		contextName = urlToContextReplacementRegex.ReplaceAllString(strings.TrimPrefix(strings.TrimPrefix(apiURL, "http://"), "https://"), "-")
 	}
@@ -97,8 +145,9 @@ func InsertConnectionInfoIntoKubeconfig(contextName, apiURL, proxyURL, token str
 	return updateKubeconfig(func(config *model.Config) error {
 		authInfoName := authInfoName(contextName)
 		config.Clusters[contextName] = &model.Cluster{
-			Server:   apiURL,
-			ProxyURL: proxyURL,
+			Server:                   apiURL,
+			ProxyURL:                 proxyURL,
+			CertificateAuthorityData: caData,
 		}
 		config.Contexts[contextName] = &model.Context{
 			Cluster:  contextName,

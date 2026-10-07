@@ -44,7 +44,7 @@ var consoleCmd = &cobra.Command{
 	Run:     runConsole,
 	Args:    cobra.MaximumNArgs(1),
 	ValidArgsFunction: completion.ClusterID(clustersInventoryFile, true, func(cluster lieutenant.Cluster) bool {
-		api, _, _ := cluster.DynamicStringFact(lieutenant.KnownDynamicFactOpenshiftConsoleURL)
+		api, _, _ := cluster.ConsoleURL()
 		return api != ""
 	}),
 }
@@ -88,7 +88,7 @@ func runConsole(cmd *cobra.Command, args []string) {
 		cluster = c
 	}
 
-	consoleURL, _, _ := cluster.DynamicStringFact(lieutenant.KnownDynamicFactOpenshiftConsoleURL)
+	consoleURL, _, _ := cluster.ConsoleURL()
 	if consoleURL == "" {
 		slog.Error("No console URL found for the specified cluster", "cluster_id", clusterID)
 		os.Exit(1)

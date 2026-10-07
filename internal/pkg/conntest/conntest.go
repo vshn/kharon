@@ -57,7 +57,7 @@ func TestClusters(r RoutingDialer, clusters []lieutenant.Cluster) iter.Seq[Repor
 		for _, cluster := range clusters {
 			var report Report
 			report.ClusterName = cluster.ID
-			if apiURL, _, _ := cluster.DynamicStringFact(lieutenant.KnownDynamicFactOpenshiftApiURL); apiURL != "" {
+			if apiURL, _, _ := cluster.GetApiURL(); apiURL != "" {
 				report.APIServerURL = apiURL
 				report.APIServerConnectionErr = get(client, apiURL)
 				u, err := url.Parse(apiURL)
@@ -73,7 +73,7 @@ func TestClusters(r RoutingDialer, clusters []lieutenant.Cluster) iter.Seq[Repor
 				}
 				continue
 			}
-			if consoleURL, _, _ := cluster.DynamicStringFact(lieutenant.KnownDynamicFactOpenshiftConsoleURL); consoleURL != "" {
+			if consoleURL, _, _ := cluster.ConsoleURL(); consoleURL != "" {
 				report.ConsoleURL = consoleURL
 				report.ConsoleConnectionErr = get(client, consoleURL)
 			}

@@ -109,7 +109,7 @@ func shellCmdArgsValidator(cmd *cobra.Command, args []string, cur string) ([]str
 	// so we check for the presence of '--' in os.Args instead.
 	if !slices.Contains(os.Args, "--") {
 		return completion.ClusterID(clustersInventoryFile, false, func(cluster lieutenant.Cluster) bool {
-			api, _, _ := cluster.DynamicStringFact(lieutenant.KnownDynamicFactOpenshiftApiURL)
+			api, _, _ := cluster.GetApiURL()
 			return api != ""
 		})(cmd, args, cur)
 	}
@@ -141,7 +141,7 @@ func runShell(cmd *cobra.Command, flags *shellCmdFlags, args []string) error {
 		labels.Everything().Add(flags.FactSelector...),
 		labels.Everything().Add(flags.DynamicFactSelector...),
 		func(c lieutenant.Cluster) bool {
-			apiURL, _, _ := c.DynamicStringFact(lieutenant.KnownDynamicFactOpenshiftApiURL)
+			apiURL, _, _ := c.GetApiURL()
 			return apiURL != ""
 		},
 	)

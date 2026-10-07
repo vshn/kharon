@@ -32,13 +32,13 @@ func Test_Client_GetClusters(t *testing.T) {
 	defer s.Close()
 
 	client := NewClient(s.URL, http.DefaultClient)
-	c, err := client.GetClusters(t.Context())
+	c, err := client.Clusters(t.Context())
 	require.NoError(t, err)
 	require.Len(t, c, 1)
 	require.Equal(t, "cluster-1", c[0].ID)
 
 	errResponse.Store(new("ran out of clusters"))
-	_, err = client.GetClusters(t.Context())
+	_, err = client.Clusters(t.Context())
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "500")
 	require.Contains(t, err.Error(), "ran out of clusters")
@@ -65,9 +65,9 @@ func Test_FindByID(t *testing.T) {
 
 func Test_FindByAPIURL(t *testing.T) {
 	clusters := []Cluster{
-		{ID: "invalid-fact", DynamicFacts: map[string]any{KnownDynamicFactOpenshiftApiURL: 12345}},
-		{ID: "cluster-1", DynamicFacts: map[string]any{KnownDynamicFactOpenshiftApiURL: "https://api.cluster-1.example.com"}},
-		{ID: "cluster-2", DynamicFacts: map[string]any{KnownDynamicFactOpenshiftApiURL: "https://api.cluster-2.example.com"}},
+		{ID: "invalid-fact", DynamicFacts: map[string]any{"openshiftApiURL": 12345}},
+		{ID: "cluster-1", DynamicFacts: map[string]any{"openshiftApiURL": "https://api.cluster-1.example.com"}},
+		{ID: "cluster-2", DynamicFacts: map[string]any{"openshiftApiURL": "https://api.cluster-2.example.com"}},
 	}
 	c, found := FindByAPIURL(clusters, "https://api.cluster-1.example.com")
 	require.True(t, found)

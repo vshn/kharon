@@ -38,21 +38,21 @@ func Test_TestClusters(t *testing.T) {
 		{
 			ID: "invalid",
 			DynamicFacts: map[string]any{
-				lieutenant.KnownDynamicFactOpenshiftApiURL: "http://foo.com/?foo\nbar",
+				"openshiftApiURL": "http://foo.com/?foo\nbar",
 			},
 		},
 		{
 			ID: "cluster1",
 			DynamicFacts: map[string]any{
-				lieutenant.KnownDynamicFactOpenshiftApiURL:     "http://api.cluster1.example.com",
-				lieutenant.KnownDynamicFactOpenshiftConsoleURL: "http://console.cluster1.example.com",
-				"openshiftOAuthRoute":                          "oauth.cluster1.example.com",
+				"openshiftApiURL":     "http://api.cluster1.example.com",
+				"openshiftConsoleURL": "http://console.cluster1.example.com",
+				"openshiftOAuthRoute": "oauth.cluster1.example.com",
 			},
 		},
 		{
 			ID: "cluster2",
 			DynamicFacts: map[string]any{
-				lieutenant.KnownDynamicFactOpenshiftApiURL: "http://api.cluster2.example.com",
+				"openshiftApiURL": "http://api.cluster2.example.com",
 			},
 		},
 	}))
