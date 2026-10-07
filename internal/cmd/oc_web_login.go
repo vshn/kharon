@@ -3,11 +3,15 @@ package cmd
 import (
 	"context"
 	"encoding/json/v2"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clientauthenticationv1beta1 "k8s.io/client-go/pkg/apis/clientauthentication/v1beta1"
 	"k8s.io/client-go/tools/clientcmd"
 
@@ -67,6 +71,9 @@ var ocWebLoginCmd = &cobra.Command{
 
 func runOCWebLogin(cmd *cobra.Command, args []string) error {
 	if len(args) == 0 {
+		if ocWebLoginExecCredential {
+			return errors.New("--exec-credential needs cluster id or api server url")
+		}
 		return loginCurrentContext(cmd.Context())
 	}
 
@@ -106,23 +113,14 @@ func loginWithClusterID(ctx context.Context, clusterID string) error {
 	if err := setProxyEnv(proxyAddrForShell(proxyAddr)); err != nil {
 		return fmt.Errorf("failed to set proxy environment variables: %w", err)
 	}
-	tok, err := ocptoken.Token(ctx, "", apiURL, ocWebLoginIDP)
+	token, expiry, err := ocptoken.Token(ctx, apiURL, ocWebLoginIDP)
 	if err != nil {
 		return fmt.Errorf("failed to request token: %w", err)
 	}
 	if ocWebLoginExecCredential {
-		res := clientauthenticationv1beta1.ExecCredential{
-			APIVersion: "client.authentication.k8s.io/v1beta1",
-			Kind:       "ExecCredential",
-			Status: &clientauthenticationv1beta1.ExecCredentialStatus{
-				Token: tok,
-			},
-		}
-		if err := json.MarshalWrite(os.Stdout, res); err != nil {
-			return fmt.Errorf("failed to marshal exec credential: %w", err)
-		}
+		writeExecCredential(os.Stdout, token, expiry)
 	} else {
-		if err := kubeconfig.InsertConnectionInfoIntoKubeconfig(clusterID, apiURL, proxyAddrForKubeconfig(proxyAddr), tok, []byte("")); err != nil {
+		if err := kubeconfig.InsertConnectionInfoIntoKubeconfig(clusterID, apiURL, proxyAddrForKubeconfig(proxyAddr), token, []byte("")); err != nil {
 			return fmt.Errorf("failed to insert connection info into kubeconfig: %w", err)
 		}
 	}
@@ -133,13 +131,19 @@ func loginWithURL(ctx context.Context, apiURL string) error {
 	if err := setProxyEnv(proxyAddrForShell(proxyAddr)); err != nil {
 		return fmt.Errorf("failed to set proxy environment variables: %w", err)
 	}
-	tok, err := ocptoken.Token(ctx, "", apiURL, ocWebLoginIDP)
+	token, expiry, err := ocptoken.Token(ctx, apiURL, ocWebLoginIDP)
 	if err != nil {
 		return fmt.Errorf("failed to request token: %w", err)
 	}
-	if err := kubeconfig.InsertConnectionInfoIntoKubeconfig("", apiURL, proxyAddrForKubeconfig(proxyAddr), tok, []byte("")); err != nil {
-		return fmt.Errorf("failed to insert connection info into kubeconfig: %w", err)
+
+	if ocWebLoginExecCredential {
+		writeExecCredential(os.Stdout, token, expiry)
+	} else {
+		if err := kubeconfig.InsertConnectionInfoIntoKubeconfig("", apiURL, proxyAddrForKubeconfig(proxyAddr), token, []byte("")); err != nil {
+			return fmt.Errorf("failed to insert connection info into kubeconfig: %w", err)
+		}
 	}
+
 	return nil
 }
 
@@ -196,4 +200,23 @@ func proxyAddrForShell(addr string) string {
 		return ""
 	}
 	return fmt.Sprintf("socks5h://%s", addr)
+}
+
+func writeExecCredential(w io.Writer, token string, expiry time.Time) error {
+	var et *metav1.Time
+	if !expiry.IsZero() {
+		et = &metav1.Time{Time: expiry.Add(-5 * time.Minute)}
+	}
+	res := clientauthenticationv1beta1.ExecCredential{
+		APIVersion: "client.authentication.k8s.io/v1beta1",
+		Kind:       "ExecCredential",
+		Status: &clientauthenticationv1beta1.ExecCredentialStatus{
+			ExpirationTimestamp: et,
+			Token:               token,
+		},
+	}
+	if err := json.MarshalWrite(w, res); err != nil {
+		return fmt.Errorf("failed to marshal exec credential: %w", err)
+	}
+	return nil
 }
