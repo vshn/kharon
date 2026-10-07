@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
 	"regexp"
 	"strings"
+	"sync"
 
 	"k8s.io/client-go/tools/clientcmd"
 	model "k8s.io/client-go/tools/clientcmd/api"
@@ -63,6 +65,8 @@ func FromClusters(clusters []lieutenant.Cluster, proxyURL, currentContext string
 	return kc
 }
 
+var osExecutable = sync.OnceValues(os.Executable)
+
 func getAuthInfo(c lieutenant.Cluster) (*model.AuthInfo, error) {
 	const authInfoName = "anonymous"
 	if !c.UseOIDC() {
@@ -86,14 +90,19 @@ func getAuthInfo(c lieutenant.Cluster) (*model.AuthInfo, error) {
 		return nil, fmt.Errorf("unable to retrieve OIDC issuer for cluster %s: %w", c.ID, err)
 	}
 
+	exe, err := osExecutable()
+	if err != nil {
+		return nil, fmt.Errorf("unable to retrieve executable path: %w", err)
+	}
+
 	return &model.AuthInfo{
 		Exec: &model.ExecConfig{
-			Command:            "kubectl",
+			Command:            exe,
 			APIVersion:         "client.authentication.k8s.io/v1",
 			InteractiveMode:    model.NeverExecInteractiveMode,
 			ProvideClusterInfo: false,
 			Args: []string{
-				"oidc-login",
+				"kubelogin",
 				"get-token",
 				fmt.Sprintf("--oidc-issuer-url=%s", oidcIssuer),
 				fmt.Sprintf("--oidc-client-id=%s", oidcClientId),
