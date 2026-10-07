@@ -1,6 +1,7 @@
 package kubeconfig
 
 import (
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -10,6 +11,8 @@ import (
 	"strings"
 	"sync"
 
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/clientcmd"
 	model "k8s.io/client-go/tools/clientcmd/api"
 	clientcmdlatest "k8s.io/client-go/tools/clientcmd/api/latest"
@@ -177,6 +180,8 @@ func InsertConnectionInfoIntoKubeconfig(contextName, apiURL, proxyURL, token str
 	}
 
 	return updateKubeconfig(func(config *model.Config) error {
+		setLastContext(config, config.CurrentContext)
+
 		authInfoName := authInfoName(contextName)
 		config.Clusters[contextName] = &model.Cluster{
 			Server:                   apiURL,
@@ -195,10 +200,101 @@ func InsertConnectionInfoIntoKubeconfig(contextName, apiURL, proxyURL, token str
 	})
 }
 
+// InsertConnectionInfoIntoKubeconfig inserts a new into the current kubeconfig.
+func InsertClusterConnectionInfo(proxyURL string, c lieutenant.Cluster) error {
+	apiURL, _, err := c.GetApiURL()
+	if err != nil {
+		return fmt.Errorf("failed to get API url for cluster %q: %w", c.ID, err)
+	}
+	if apiURL == "" {
+		return fmt.Errorf("cluster %q has no known API url", err)
+	}
+
+	contextName := c.ID
+
+	caData, _, err := c.CAData()
+	if err != nil {
+		return fmt.Errorf("failed to retrieve CA data for cluster %q: %w", c.ID, err)
+	}
+
+	authInfo, err := getAuthInfo(apiURL, c)
+	if err != nil {
+		return fmt.Errorf("failed to retrieve AuthInfo for cluster %q: %w", c.ID, err)
+	}
+
+	return updateKubeconfig(func(config *model.Config) error {
+		setLastContext(config, config.CurrentContext)
+
+		authInfoName := authInfoName(contextName)
+		config.Clusters[contextName] = &model.Cluster{
+			Server:                   apiURL,
+			ProxyURL:                 proxyURL,
+			CertificateAuthorityData: caData,
+		}
+		config.Contexts[contextName] = &model.Context{
+			Cluster:  contextName,
+			AuthInfo: authInfoName,
+		}
+		config.AuthInfos[authInfoName] = authInfo
+		config.CurrentContext = contextName
+
+		return nil
+	})
+}
+
+// RestoreLastContext restores the context before the last kubectl write by this package
+func RestoreLastContext() error {
+	return updateKubeconfig(func(config *model.Config) error {
+		lastCtx, err := getLastContext(config)
+		if err != nil {
+			return fmt.Errorf("failed to get last context: %w", err)
+		}
+		setLastContext(config, config.CurrentContext)
+		config.CurrentContext = lastCtx
+
+		return nil
+	})
+}
+
+func setLastContext(config *model.Config, context string) {
+	obj := &unstructured.Unstructured{
+		Object: map[string]any{
+			"apiVersion": "kharon.vshn.io/v1beta1",
+			"kind":       "LastContext",
+			"spec": map[string]any{
+				"lastContext": context,
+			},
+		},
+	}
+
+	ext := config.Preferences.Extensions
+	if ext == nil {
+		ext = make(map[string]runtime.Object)
+	}
+	ext["kharon.vshn.io/last-context"] = obj
+	config.Preferences.Extensions = ext
+}
+
+func getLastContext(config *model.Config) (string, error) {
+	rawExt := config.Preferences.Extensions["kharon.vshn.io/last-context"]
+	runtimeExt, ok := rawExt.(*runtime.Unknown)
+	if !ok {
+		return "", fmt.Errorf("unexpected type %T, expected *runtime.Unknown", rawExt)
+	}
+	var stor unstructured.Unstructured
+	if err := json.Unmarshal(runtimeExt.Raw, &stor); err != nil {
+		return "", fmt.Errorf("failed to unmarshal raw extension: %w", err)
+	}
+	lastContext, _, err := unstructured.NestedString(stor.Object, "spec", "lastContext")
+	return lastContext, err
+}
+
 // SetCurrentContext sets the current context in the kubeconfig to the given context name.
 // It returns an error if the context does not exist in the kubeconfig.
 func SetCurrentContext(contextName string) error {
 	return updateKubeconfig(func(config *model.Config) error {
+		setLastContext(config, config.CurrentContext)
+
 		if _, ok := config.Contexts[contextName]; !ok {
 			return fmt.Errorf("context %q not found in kubeconfig", contextName)
 		}

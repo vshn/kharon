@@ -513,11 +513,42 @@ func Test_SetCurrentContext(t *testing.T) {
 	}
 }
 
+func Test_RestoreLastContext(t *testing.T) {
+	starting := kcapi.NewConfig()
+	starting.Contexts["context-a"] = &kcapi.Context{}
+	starting.Contexts["context-b"] = &kcapi.Context{}
+	starting.CurrentContext = "context-a"
+
+	td := t.TempDir()
+	kubeconfigPath := td + "/kubeconfig"
+	require.NoError(t, clientcmd.WriteToFile(*starting, kubeconfigPath))
+	t.Setenv("KUBECONFIG", kubeconfigPath)
+
+	requireCurrentContext(t, kubeconfigPath, "context-a")
+
+	kubeconfig.SetCurrentContext("context-b")
+
+	requireCurrentContext(t, kubeconfigPath, "context-b")
+
+	kubeconfig.RestoreLastContext()
+
+	requireCurrentContext(t, kubeconfigPath, "context-a")
+}
+
+func requireCurrentContext(t *testing.T, kubeconfigPath, expected string) {
+	t.Helper()
+
+	kubeConfig, err := new(clientcmd.ClientConfigLoadingRules{ExplicitPath: kubeconfigPath}).Load()
+	require.NoError(t, err)
+	require.Equal(t, expected, kubeConfig.CurrentContext)
+}
+
 func kubeconfigDiffOptions() cmp.Options {
 	return cmp.Options{
 		cmpopts.EquateEmpty(),
 		cmpopts.IgnoreFields(kcapi.Cluster{}, "LocationOfOrigin"),
 		cmpopts.IgnoreFields(kcapi.AuthInfo{}, "LocationOfOrigin"),
 		cmpopts.IgnoreFields(kcapi.Context{}, "LocationOfOrigin"),
+		cmpopts.IgnoreFields(kcapi.Preferences{}, "Extensions"),
 	}
 }
