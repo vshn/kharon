@@ -44,14 +44,16 @@ func VerifyToken(ctx context.Context, token, apiURL string) (ok bool, err error)
 }
 
 // Token returns a non-expired token from cache or the API Server.
-func Token(ctx context.Context, apiURL, idp string) (string, time.Time, error) {
-	cachedToken, err := cache.GetToken(apiURL)
-	if err != nil {
-		return "", time.Time{}, fmt.Errorf("failed to get cached token: %w", err)
-	}
-	if cachedToken != (cache.Entry{}) && !expiresSoon(cachedToken.Expiry) {
-		slog.Debug("Found valid cached token", "api_url", apiURL, "expiry", cachedToken.Expiry)
-		return cachedToken.Token, cachedToken.Expiry, nil
+func Token(ctx context.Context, apiURL, idp string, refresh bool) (string, time.Time, error) {
+	if !refresh {
+		cachedToken, err := cache.GetToken(apiURL)
+		if err != nil {
+			return "", time.Time{}, fmt.Errorf("failed to get cached token: %w", err)
+		}
+		if cachedToken != (cache.Entry{}) && !expiresSoon(cachedToken.Expiry) {
+			slog.Debug("Found valid cached token", "api_url", apiURL, "expiry", cachedToken.Expiry)
+			return cachedToken.Token, cachedToken.Expiry, nil
+		}
 	}
 
 	return requestToken(ctx, apiURL, idp)

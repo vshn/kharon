@@ -94,7 +94,7 @@ func Test_Token(t *testing.T) {
 			Token:  token,
 		}))
 
-		got, expiry, err := Token(context.Background(), srv.URL, "")
+		got, expiry, err := Token(context.Background(), srv.URL, "", false)
 		require.NoError(t, err)
 		require.Equal(t, token, got)
 		require.True(t, expiry.After(time.Now()), "expected cached token expiry to be in the future")
@@ -119,7 +119,7 @@ func Test_Token(t *testing.T) {
 			Token:  token,
 		}))
 
-		got, expiry, err := Token(context.Background(), srv.URL, "")
+		got, expiry, err := Token(context.Background(), srv.URL, "", false)
 		require.NoError(t, err)
 		require.Equal(t, "new-token", got)
 		require.True(t, expiry.After(time.Now()), "expected token expiry to be in the future")
@@ -138,7 +138,31 @@ func Test_Token(t *testing.T) {
 			},
 		)
 
-		got, expiry, err := Token(context.Background(), srv.URL, "")
+		got, expiry, err := Token(context.Background(), srv.URL, "", false)
+		require.NoError(t, err)
+		require.Equal(t, "new-token", got)
+		require.True(t, expiry.After(time.Now()), "expected token expiry to be in the future")
+	})
+
+	t.Run("requests new token when refresh is true", func(t *testing.T) {
+		mockUserHomeDir(t)
+
+		mockTokenRequestFunc(t, func(clientCfg *rest.Config, authzURLHandler tokenrequest.AuthorizationURLHandlerFunc, callbackPort int) (string, error) {
+			return "new-token", nil
+		})
+
+		srv := newMockAPIServer(t,
+			func(w http.ResponseWriter, r *http.Request) {
+				writeTokenResponse(t, w, time.Now().Add(-2*time.Hour), 3600*12)
+			},
+		)
+
+		require.NoError(t, cache.WriteToken(srv.URL, cache.Entry{
+			Expiry: time.Now().Add(12 * time.Hour),
+			Token:  "refreshed",
+		}))
+
+		got, expiry, err := Token(context.Background(), srv.URL, "", true)
 		require.NoError(t, err)
 		require.Equal(t, "new-token", got)
 		require.True(t, expiry.After(time.Now()), "expected token expiry to be in the future")

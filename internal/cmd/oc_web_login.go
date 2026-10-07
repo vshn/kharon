@@ -12,7 +12,7 @@ import (
 
 	"github.com/spf13/cobra"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	clientauthenticationv1beta1 "k8s.io/client-go/pkg/apis/clientauthentication/v1beta1"
+	clientauthenticationv1 "k8s.io/client-go/pkg/apis/clientauthentication/v1"
 	"k8s.io/client-go/tools/clientcmd"
 
 	"github.com/vshn/kharon/internal/pkg/cache"
@@ -23,13 +23,14 @@ import (
 )
 
 var ocWebLoginIDP string
-var ocWebLoginExecCredential bool
+var ocWebLoginExecCredential, ocWebLoginForceRefreshToken bool
 
 func init() {
 	RootCmd.AddCommand(ocWebLoginCmd)
 
 	flag := ocWebLoginCmd.Flags()
 	flag.BoolVar(&ocWebLoginExecCredential, "exec-credential", false, "Return token for use with the kubectl credential exec plugin.")
+	flag.BoolVar(&ocWebLoginForceRefreshToken, "force-refresh-token", false, "Force refreshes the cached token.")
 	flag.StringVar(&clustersInventoryFile, "inventory-file", inventoryFilePath(), "Path to the inventory file that should be used by this command.")
 	flag.StringVar(&proxyAddr, "proxy-addr", defaultProxyAddr, "Address of the proxy to use in the generated kubeconfig file.")
 	flag.StringVar(&ocWebLoginIDP, "idp", "vshn-idp", "The name of the Identity Provider to use for login. If not specified, the user might be prompted to choose one on the OCP login page.")
@@ -113,7 +114,7 @@ func loginWithClusterID(ctx context.Context, clusterID string) error {
 	if err := setProxyEnv(proxyAddrForShell(proxyAddr)); err != nil {
 		return fmt.Errorf("failed to set proxy environment variables: %w", err)
 	}
-	token, expiry, err := ocptoken.Token(ctx, apiURL, ocWebLoginIDP)
+	token, expiry, err := ocptoken.Token(ctx, apiURL, ocWebLoginIDP, ocWebLoginForceRefreshToken)
 	if err != nil {
 		return fmt.Errorf("failed to request token: %w", err)
 	}
@@ -131,7 +132,7 @@ func loginWithURL(ctx context.Context, apiURL string) error {
 	if err := setProxyEnv(proxyAddrForShell(proxyAddr)); err != nil {
 		return fmt.Errorf("failed to set proxy environment variables: %w", err)
 	}
-	token, expiry, err := ocptoken.Token(ctx, apiURL, ocWebLoginIDP)
+	token, expiry, err := ocptoken.Token(ctx, apiURL, ocWebLoginIDP, ocWebLoginForceRefreshToken)
 	if err != nil {
 		return fmt.Errorf("failed to request token: %w", err)
 	}
@@ -163,14 +164,18 @@ func loginCurrentContext(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to load kubeconfig: %w", err)
 	}
+	existingToken := cfg.BearerToken
+	if ocWebLoginForceRefreshToken {
+		existingToken = ""
+	}
 
 	var tok string
-	if ok, err := ocptoken.VerifyToken(ctx, cfg.BearerToken, kc.Server); err != nil {
+	if ok, err := ocptoken.VerifyToken(ctx, existingToken, kc.Server); err != nil {
 		return fmt.Errorf("failed to verify existing token: %w", err)
 	} else if ok {
 		tok = cfg.BearerToken
 	} else {
-		t, _, err := ocptoken.Token(ctx, kc.Server, ocWebLoginIDP)
+		t, _, err := ocptoken.Token(ctx, kc.Server, ocWebLoginIDP, ocWebLoginForceRefreshToken)
 		if err != nil {
 			return fmt.Errorf("failed to get token: %w", err)
 		}
@@ -207,10 +212,12 @@ func writeExecCredential(w io.Writer, token string, expiry time.Time) error {
 	if !expiry.IsZero() {
 		et = &metav1.Time{Time: expiry.Add(-5 * time.Minute)}
 	}
-	res := clientauthenticationv1beta1.ExecCredential{
-		APIVersion: "client.authentication.k8s.io/v1beta1",
+	res := clientauthenticationv1.ExecCredential{
+		APIVersion: "client.authentication.k8s.io/v1",
 		Kind:       "ExecCredential",
-		Status: &clientauthenticationv1beta1.ExecCredentialStatus{
+		Status: &clientauthenticationv1.ExecCredentialStatus{
+			// ExpirationTimestamp actually does not really matter, as tokens are not saved between executions.
+			// https://kubernetes.io/docs/reference/access-authn-authz/authentication/#client-go-credential-plugins
 			ExpirationTimestamp: et,
 			Token:               token,
 		},

@@ -16,14 +16,14 @@ users:
 - name: c-appuio-lab-cloudscale-rma-0
   user:
     exec:
-      apiVersion: client.authentication.k8s.io/v1beta1
+      apiVersion: client.authentication.k8s.io/v1
       args:
       - oc-web-login
       - c-appuio-lab-cloudscale-rma-0
       - --exec-credential
       command: /Users/sebastianwidmer/workspace/kharon/kharon
       env: null
-      interactiveMode: IfAvailable
+      interactiveMode: Never
       provideClusterInfo: false
 YAML
 
