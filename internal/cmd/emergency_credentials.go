@@ -122,7 +122,7 @@ func runEmergencyCredentials(cmd *cobra.Command, args []string) error {
 	for i, token := range tokens {
 		caData, _, err := cluster.CAData()
 		if err != nil {
-				slog.Warn("Failed to retrieve CA data, possibly malformed", "error", err)
+			slog.Warn("Failed to retrieve CA data, possibly malformed", "error", err)
 		}
 		err = kubeconfig.InsertConnectionInfoIntoKubeconfig(fmt.Sprintf("emergency-credentials/%d/%s", i, cluster.ID), apiURL, proxyAddrForKubeconfig(proxyAddr), token, caData)
 		if err != nil {

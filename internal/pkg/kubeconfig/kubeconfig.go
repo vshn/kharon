@@ -38,11 +38,11 @@ func FromClusters(clusters []lieutenant.Cluster, proxyURL, currentContext string
 		contextName := c.ID
 		caData, _, err := c.CAData()
 		if err != nil {
-				slog.Warn("Failed to retrieve CA data, possibly malformed", "id",c.ID,"error",err)
+			slog.Warn("Failed to retrieve CA data, possibly malformed", "id", c.ID, "error", err)
 		}
 		authInfo, err := getAuthInfo(c)
 		if err != nil {
-			slog.Warn("Failed to build AuthInfo for cluster", "id",c.ID,"error",err)
+			slog.Warn("Failed to build AuthInfo for cluster", "id", c.ID, "error", err)
 			continue
 		}
 		kc.Clusters[clusterName] = &model.Cluster{
@@ -74,14 +74,14 @@ func getAuthInfo(c lieutenant.Cluster) (*model.AuthInfo, error) {
 	oidcClientId, ok, err := c.OIDCClientId()
 	if err != nil || !ok {
 		if err == nil {
-				err = errors.New("cluster has no OIDC client id fact")
+			err = errors.New("cluster has no OIDC client id fact")
 		}
 		return nil, fmt.Errorf("unable to retrieve OIDC client id for cluster %s: %w", c.ID, err)
 	}
 	oidcIssuer, ok, err := c.OIDCIssuer()
 	if err != nil || !ok {
 		if err == nil {
-				err = errors.New("cluster has no OIDC issuer fact")
+			err = errors.New("cluster has no OIDC issuer fact")
 		}
 		return nil, fmt.Errorf("unable to retrieve OIDC issuer for cluster %s: %w", c.ID, err)
 	}
