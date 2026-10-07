@@ -135,7 +135,11 @@ func (c Cluster) OIDCIssuer() (string, bool, error) {
 	}
 }
 
-func (c Cluster) ClusterDomains() (string, []string, error) {
+// ClusterDomains returns all domains associated with a cluster, including the base domain and
+// any domains that are part of the API URL, Apps domain, console URL, and any others.
+// The base domain is returned separately for convenience.
+// If errors occur while gathering domains, the result may be incomplete.
+func (c Cluster) ClusterDomains() (baseDomain string, additionalDomains []string, err error) {
 	var domains []string
 	var errs []error
 	var baseDomainFact string
@@ -164,7 +168,7 @@ func (c Cluster) ClusterDomains() (string, []string, error) {
 	default:
 		return "", []string{}, nil
 	}
-	baseDomain, _, err := c.DynamicStringFact(baseDomainFact)
+	base, _, err := c.DynamicStringFact(baseDomainFact)
 	if err != nil {
 		errs = append(errs, fmt.Errorf("failed to get base domain dynamic fact for cluster %s: %w", c.ID, err))
 	}
@@ -172,7 +176,7 @@ func (c Cluster) ClusterDomains() (string, []string, error) {
 	for _, extraDomainFact := range extraDomainFacts {
 		if extraDomain, _, err := c.DynamicStringFact(extraDomainFact); err != nil {
 			errs = append(errs, fmt.Errorf("failed to get %s dynamic fact for cluster %s: %w", extraDomainFact, c.ID, err))
-		} else if extraDomain != "" && !hasBaseDomain(extraDomain, baseDomain) {
+		} else if extraDomain != "" && !hasBaseDomain(extraDomain, base) {
 			domains = append(domains, extraDomain)
 		}
 	}
@@ -183,12 +187,12 @@ func (c Cluster) ClusterDomains() (string, []string, error) {
 			u, err := url.Parse(extraUrl)
 			if err != nil {
 				errs = append(errs, fmt.Errorf("failed to parse %s dynamic fact for cluster %s: %w", extraUrlFact, c.ID, err))
-			} else if domain := u.Hostname(); domain != "" && !hasBaseDomain(domain, baseDomain) {
+			} else if domain := u.Hostname(); domain != "" && !hasBaseDomain(domain, base) {
 				domains = append(domains, domain)
 			}
 		}
 	}
-	return baseDomain, domains, multierr.Combine(errs...)
+	return base, domains, multierr.Combine(errs...)
 
 }
 
