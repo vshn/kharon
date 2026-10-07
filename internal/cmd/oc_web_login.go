@@ -119,7 +119,9 @@ func loginWithClusterID(ctx context.Context, clusterID string) error {
 		return fmt.Errorf("failed to request token: %w", err)
 	}
 	if ocWebLoginExecCredential {
-		writeExecCredential(os.Stdout, token, expiry)
+		if err := writeExecCredential(os.Stdout, token, expiry); err != nil {
+			return fmt.Errorf("failed to write exec credentials: %w", err)
+		}
 	} else {
 		if err := kubeconfig.InsertConnectionInfoIntoKubeconfig(clusterID, apiURL, proxyAddrForKubeconfig(proxyAddr), token, []byte("")); err != nil {
 			return fmt.Errorf("failed to insert connection info into kubeconfig: %w", err)
@@ -138,7 +140,9 @@ func loginWithURL(ctx context.Context, apiURL string) error {
 	}
 
 	if ocWebLoginExecCredential {
-		writeExecCredential(os.Stdout, token, expiry)
+		if err := writeExecCredential(os.Stdout, token, expiry); err != nil {
+			return fmt.Errorf("failed to write exec credentials: %w", err)
+		}
 	} else {
 		if err := kubeconfig.InsertConnectionInfoIntoKubeconfig("", apiURL, proxyAddrForKubeconfig(proxyAddr), token, []byte("")); err != nil {
 			return fmt.Errorf("failed to insert connection info into kubeconfig: %w", err)
