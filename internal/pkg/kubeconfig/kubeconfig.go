@@ -42,7 +42,7 @@ func FromClusters(clusters []lieutenant.Cluster, proxyURL, currentContext string
 		if err != nil {
 			slog.Warn("Failed to retrieve CA data, possibly malformed", "id", c.ID, "error", err)
 		}
-		authInfo, err := getAuthInfo(c)
+		authInfo, err := getAuthInfo(api, c)
 		if err != nil {
 			slog.Warn("Failed to build AuthInfo for cluster", "id", c.ID, "error", err)
 			continue
@@ -67,47 +67,72 @@ func FromClusters(clusters []lieutenant.Cluster, proxyURL, currentContext string
 
 var osExecutable = sync.OnceValues(os.Executable)
 
-func getAuthInfo(c lieutenant.Cluster) (*model.AuthInfo, error) {
-	const authInfoName = "anonymous"
-	if !c.UseOIDC() {
+func getAuthInfo(apiurl string, c lieutenant.Cluster) (*model.AuthInfo, error) {
+	dist, _, err := c.Distribution()
+	if err != nil {
+		return nil, fmt.Errorf("failed to determine distribution: %w", err)
+	}
+
+	switch dist {
+	case lieutenant.DistributionOpenshift:
+		exe, err := osExecutable()
+		if err != nil {
+			return nil, fmt.Errorf("unable to retrieve executable path: %w", err)
+		}
+
 		return &model.AuthInfo{
-			Username: authInfoName,
+			Exec: &model.ExecConfig{
+				Command:            exe,
+				APIVersion:         "client.authentication.k8s.io/v1",
+				InteractiveMode:    model.NeverExecInteractiveMode,
+				ProvideClusterInfo: false,
+				Args: []string{
+					"oc-web-login",
+					apiurl,
+					"--exec-credential",
+				},
+			},
+		}, nil
+	case lieutenant.DistributionTalos:
+		oidcClientId, ok, err := c.OIDCClientId()
+		if err != nil || !ok {
+			if err == nil {
+				err = errors.New("cluster has no OIDC client id fact")
+			}
+			return nil, fmt.Errorf("unable to retrieve OIDC client id for cluster %s: %w", c.ID, err)
+		}
+		oidcIssuer, ok, err := c.OIDCIssuer()
+		if err != nil || !ok {
+			if err == nil {
+				err = errors.New("cluster has no OIDC issuer fact")
+			}
+			return nil, fmt.Errorf("unable to retrieve OIDC issuer for cluster %s: %w", c.ID, err)
+		}
+
+		exe, err := osExecutable()
+		if err != nil {
+			return nil, fmt.Errorf("unable to retrieve executable path: %w", err)
+		}
+
+		return &model.AuthInfo{
+			Exec: &model.ExecConfig{
+				Command:            exe,
+				APIVersion:         "client.authentication.k8s.io/v1",
+				InteractiveMode:    model.NeverExecInteractiveMode,
+				ProvideClusterInfo: false,
+				Args: []string{
+					"kubelogin",
+					"get-token",
+					fmt.Sprintf("--oidc-issuer-url=%s", oidcIssuer),
+					fmt.Sprintf("--oidc-client-id=%s", oidcClientId),
+				},
+			},
 		}, nil
 	}
 
-	oidcClientId, ok, err := c.OIDCClientId()
-	if err != nil || !ok {
-		if err == nil {
-			err = errors.New("cluster has no OIDC client id fact")
-		}
-		return nil, fmt.Errorf("unable to retrieve OIDC client id for cluster %s: %w", c.ID, err)
-	}
-	oidcIssuer, ok, err := c.OIDCIssuer()
-	if err != nil || !ok {
-		if err == nil {
-			err = errors.New("cluster has no OIDC issuer fact")
-		}
-		return nil, fmt.Errorf("unable to retrieve OIDC issuer for cluster %s: %w", c.ID, err)
-	}
-
-	exe, err := osExecutable()
-	if err != nil {
-		return nil, fmt.Errorf("unable to retrieve executable path: %w", err)
-	}
-
+	slog.Warn("Unsupported distribution, using empty auth config", "id", c.ID, "distribution", dist)
 	return &model.AuthInfo{
-		Exec: &model.ExecConfig{
-			Command:            exe,
-			APIVersion:         "client.authentication.k8s.io/v1",
-			InteractiveMode:    model.NeverExecInteractiveMode,
-			ProvideClusterInfo: false,
-			Args: []string{
-				"kubelogin",
-				"get-token",
-				fmt.Sprintf("--oidc-issuer-url=%s", oidcIssuer),
-				fmt.Sprintf("--oidc-client-id=%s", oidcClientId),
-			},
-		},
+		Username: "anonymous",
 	}, nil
 }
 

@@ -115,7 +115,18 @@ func Test_FromClusters_Encode(t *testing.T) {
 		{
 			"name": "c-example-2",
 			"user": {
-				"username": "anonymous"
+				"exec": {
+					"apiVersion": "client.authentication.k8s.io/v1",
+					"args": [
+						"oc-web-login",
+						"https://api.c-example-2.vshnmanaged.net:6443",
+						"--exec-credential"
+					],
+					"command": "%s",
+					"env": null,
+					"interactiveMode": "Never",
+					"provideClusterInfo": false
+				}
 			}
 		},
 		{
@@ -134,18 +145,29 @@ func Test_FromClusters_Encode(t *testing.T) {
 					"interactiveMode": "Never",
 					"provideClusterInfo": false
 				}
-	        }
+			}
 		},
 		{
 			"name": "c-test-1",
 			"user": {
-				"username": "anonymous"
+				"exec": {
+					"apiVersion": "client.authentication.k8s.io/v1",
+					"args": [
+						"oc-web-login",
+						"https://api.c-test-1.vshnmanaged.net:6443",
+						"--exec-credential"
+					],
+					"command": "%s",
+					"env": null,
+					"interactiveMode": "Never",
+					"provideClusterInfo": false
+				}
 			}
 		}
 	]
 }`
 
-	require.JSONEq(t, fmt.Sprintf(expected, exe), string(resultJSON))
+	require.JSONEq(t, fmt.Sprintf(expected, exe, exe, exe), string(resultJSON))
 }
 
 func Test_FromClusters_CurrentContext(t *testing.T) {
