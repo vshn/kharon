@@ -106,7 +106,7 @@ func loginWithClusterID(ctx context.Context, clusterID string) error {
 	if err := setProxyEnv(proxyAddrForShell(proxyAddr)); err != nil {
 		return fmt.Errorf("failed to set proxy environment variables: %w", err)
 	}
-	tok, err := ocptoken.EnsureToken(ctx, "", apiURL, ocWebLoginIDP)
+	tok, err := ocptoken.Token(ctx, "", apiURL, ocWebLoginIDP)
 	if err != nil {
 		return fmt.Errorf("failed to request token: %w", err)
 	}
@@ -133,7 +133,7 @@ func loginWithURL(ctx context.Context, apiURL string) error {
 	if err := setProxyEnv(proxyAddrForShell(proxyAddr)); err != nil {
 		return fmt.Errorf("failed to set proxy environment variables: %w", err)
 	}
-	tok, err := ocptoken.EnsureToken(ctx, "", apiURL, ocWebLoginIDP)
+	tok, err := ocptoken.Token(ctx, "", apiURL, ocWebLoginIDP)
 	if err != nil {
 		return fmt.Errorf("failed to request token: %w", err)
 	}
@@ -160,9 +160,17 @@ func loginCurrentContext(ctx context.Context) error {
 		return fmt.Errorf("failed to load kubeconfig: %w", err)
 	}
 
-	tok, err := ocptoken.EnsureToken(ctx, cfg.BearerToken, kc.Server, ocWebLoginIDP)
-	if err != nil {
-		return fmt.Errorf("failed to ensure token: %w", err)
+	var tok string
+	if ok, err := ocptoken.VerifyToken(ctx, cfg.BearerToken, kc.Server); err != nil {
+		return fmt.Errorf("failed to verify existing token: %w", err)
+	} else if ok {
+		tok = cfg.BearerToken
+	} else {
+		t, _, err := ocptoken.Token(ctx, kc.Server, ocWebLoginIDP)
+		if err != nil {
+			return fmt.Errorf("failed to get token: %w", err)
+		}
+		tok = t
 	}
 
 	if err := kubeconfig.InsertTokenIntoCurrentContext(tok); err != nil {
