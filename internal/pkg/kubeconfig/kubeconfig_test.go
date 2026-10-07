@@ -117,17 +117,16 @@ func Test_FromClusters_Encode(t *testing.T) {
 			"name": "c-example-talos-3",
 			"user": {
 				"exec": {
-					"apiVersion": "client.authentication.k8s.io/v1beta1",
+					"apiVersion": "client.authentication.k8s.io/v1",
 					"args": [
 						"oidc-login",
 						"get-token",
 						"--oidc-issuer-url=https://my.keycloak.com/auth/realms/my-realm",
-						"--oidc-client-id=client_c-example-talos-3",
-						"--oidc-extra-scope=email offline_access profile openid"
+						"--oidc-client-id=client_c-example-talos-3"
 					],
 					"command": "kubectl",
 					"env": null,
-					"interactiveMode": "IfAvailable",
+					"interactiveMode": "Never",
 					"provideClusterInfo": false
 				}
 	        }

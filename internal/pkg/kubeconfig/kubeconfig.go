@@ -1,8 +1,10 @@
 package kubeconfig
 
 import (
+	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"regexp"
 	"strings"
 
@@ -34,8 +36,15 @@ func FromClusters(clusters []lieutenant.Cluster, proxyURL, currentContext string
 		}
 		clusterName := c.ID
 		contextName := c.ID
-		caData, _, _ := c.CAData()
-		authInfo, _ := getAuthInfo(c)
+		caData, _, err := c.CAData()
+		if err != nil {
+				slog.Warn("Failed to retrieve CA data, possibly malformed", "id",c.ID,"error",err)
+		}
+		authInfo, err := getAuthInfo(c)
+		if err != nil {
+			slog.Warn("Failed to build AuthInfo for cluster", "id",c.ID,"error",err)
+			continue
+		}
 		kc.Clusters[clusterName] = &model.Cluster{
 			Server:                   api,
 			ProxyURL:                 proxyURL,
@@ -62,27 +71,32 @@ func getAuthInfo(c lieutenant.Cluster) (*model.AuthInfo, error) {
 		}, nil
 	}
 
-	oidcClientId, _, err := c.OIDCClientId()
-	if err != nil {
-		return nil, fmt.Errorf("unable to retrieve OIDC client for cluster %s: %w", c.ID, err)
+	oidcClientId, ok, err := c.OIDCClientId()
+	if err != nil || !ok {
+		if err == nil {
+				err = errors.New("cluster has no OIDC client id fact")
+		}
+		return nil, fmt.Errorf("unable to retrieve OIDC client id for cluster %s: %w", c.ID, err)
 	}
-	oidcIssuer, _, err := c.OIDCIssuer()
-	if err != nil {
+	oidcIssuer, ok, err := c.OIDCIssuer()
+	if err != nil || !ok {
+		if err == nil {
+				err = errors.New("cluster has no OIDC issuer fact")
+		}
 		return nil, fmt.Errorf("unable to retrieve OIDC issuer for cluster %s: %w", c.ID, err)
 	}
 
 	return &model.AuthInfo{
 		Exec: &model.ExecConfig{
 			Command:            "kubectl",
-			APIVersion:         "client.authentication.k8s.io/v1beta1",
-			InteractiveMode:    model.IfAvailableExecInteractiveMode,
+			APIVersion:         "client.authentication.k8s.io/v1",
+			InteractiveMode:    model.NeverExecInteractiveMode,
 			ProvideClusterInfo: false,
 			Args: []string{
 				"oidc-login",
 				"get-token",
 				fmt.Sprintf("--oidc-issuer-url=%s", oidcIssuer),
 				fmt.Sprintf("--oidc-client-id=%s", oidcClientId),
-				"--oidc-extra-scope=email offline_access profile openid",
 			},
 		},
 	}, nil
