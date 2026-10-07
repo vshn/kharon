@@ -10,7 +10,7 @@ require (
 	github.com/coreos/go-oidc/v3 v3.20.0
 	github.com/creack/pty v1.1.24
 	github.com/fatih/color v1.19.0
-	github.com/foxcpp/go-mockdns v1.2.0
+	github.com/foxcpp/go-mockdns v1.3.0
 	github.com/google/go-cmp v0.7.0
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
 	github.com/int128/kubelogin v1.36.4
