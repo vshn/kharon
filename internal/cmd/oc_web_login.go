@@ -38,6 +38,8 @@ func init() {
 
 const ocWebLoginCmdLongDesc = `Log in to OpenShift clusters with a web-based login.
 Works similarly to 'oc login --web' but can be used without having the 'oc' CLI installed, respects the proxy settings from the kubeconfig, and supports querying authentication URLs from the inventory.
+The command can be used as a kubectl credential plugin (--exec-credential) and enable automatic login to OpenShift clusters through kubectl.
+See the example section for an example to enable automatic login.
 If not arguments are provided, it will attempt to log in to the cluster of the current kubeconfig context.
 If a cluster ID or API server URL is provided, it will attempt to log in to that cluster.
 
@@ -55,7 +57,39 @@ BROWSER="open -a firefox" kharon oc-web-login
 kharon oc-web-login c-12345
 
 # Login to a specific cluster by API server URL
-kharon oc-web-login https://api.c-12345.example.com:6443`
+kharon oc-web-login https://api.c-12345.example.com:6443
+
+# Configure cluster for automatic login
+cat > autologin.yml <<YAML
+apiVersion: v1
+clusters:
+- cluster:
+    proxy-url: socks5://localhost:12000
+    server: https://api.example.com:6443
+  name: c-example
+contexts:
+- context:
+    cluster: c-example
+    user: c-example
+  name: c-example
+current-context: c-example
+kind: Config
+users:
+- name: c-example
+  user:
+    exec:
+      apiVersion: client.authentication.k8s.io/v1
+      args:
+      - oc-web-login
+      - https://api.example.com:6443
+      - --exec-credential
+      command: kharon
+      env: null
+      interactiveMode: Never
+      provideClusterInfo: false
+YAML
+KUBECONFIG=autologin.yml kubectl get nodes
+`
 
 var ocWebLoginCmd = &cobra.Command{
 	Use:     "oc-web-login [c-cluster-id | https://api-server]",
