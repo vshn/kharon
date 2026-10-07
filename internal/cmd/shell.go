@@ -46,16 +46,16 @@ kharon shell 'c-cluster-*'
 kharon shell c-cluster-1 c-cluster-2
 
 # Get all nodes on a specific cluster
-kharon shell c-cluster-1 -- -c 'kharon oc-web-login; kubectl get nodes'
+kharon shell c-cluster-1 -- -c 'kubectl get nodes'
 
 # Collect node information for all clusters
-kharon shell --each -- sh -c 'kharon oc-web-login; kubectl get nodes'
+kharon shell --each -- sh -c 'kubectl get nodes'
 
 # Collect node information for all prod clusters, excluding a certain customer
-kharon shell '*prod*' --exclude-cluster 'customer-*' --each -- sh -c 'kharon oc-web-login; kubectl get nodes'
+kharon shell '*prod*' --exclude-cluster 'customer-*' --each -- sh -c 'kubectl get nodes'
 
 # Collect node information c-cluster-1 and c-cluster-2
-kharon shell c-cluster-1 c-cluster-2 --each -- sh -c 'kharon oc-web-login; kubectl get nodes'
+kharon shell c-cluster-1 c-cluster-2 --each -- sh -c 'kubectl get nodes'
 
 # Execute a custom command instead of a shell
 kharon shell c-cluster-1 --command -- my-kube-tool -x
