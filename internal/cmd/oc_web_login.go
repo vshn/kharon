@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"strings"
 	"time"
@@ -37,6 +38,9 @@ func init() {
 }
 
 const ocWebLoginCmdLongDesc = `Log in to OpenShift clusters with a web-based login.
+
+Deprecated: Consider using 'kharon switch' which is distribution agnostic and supports automatic token refresh.
+
 Works similarly to 'oc login --web' but can be used without having the 'oc' CLI installed, respects the proxy settings from the kubeconfig, and supports querying authentication URLs from the inventory.
 The command can be used as a kubectl credential plugin (--exec-credential) and enable automatic login to OpenShift clusters through kubectl.
 See the example section for an example to enable automatic login.
@@ -47,19 +51,7 @@ The command to open the console can be overridden by setting the KHARON_BROWSER 
 
 Works on the inventory downloaded by the 'update' command, so it does not require access to the Lieutenant API.`
 
-const ocWebLoginCmdExample = `# Login to the current cluster
-kharon oc-web-login
-
-# Open the cluster console in the non-default browser (e.g. Firefox) on macOS
-BROWSER="open -a firefox" kharon oc-web-login
-
-# Login to a specific cluster by ID
-kharon oc-web-login c-12345
-
-# Login to a specific cluster by API server URL
-kharon oc-web-login https://api.c-12345.example.com:6443
-
-# Configure cluster for automatic login
+const ocWebLoginCmdExample = `# Configure cluster for automatic login
 cat > autologin.yml <<YAML
 apiVersion: v1
 clusters:
@@ -89,6 +81,18 @@ users:
       provideClusterInfo: false
 YAML
 KUBECONFIG=autologin.yml kubectl get nodes
+
+# Login to the current cluster
+kharon oc-web-login
+
+# Open the cluster console in the non-default browser (e.g. Firefox) on macOS
+BROWSER="open -a firefox" kharon oc-web-login
+
+# Login to a specific cluster by ID
+kharon oc-web-login c-12345
+
+# Login to a specific cluster by API server URL
+kharon oc-web-login https://api.c-12345.example.com:6443
 `
 
 var ocWebLoginCmd = &cobra.Command{
@@ -105,6 +109,10 @@ var ocWebLoginCmd = &cobra.Command{
 }
 
 func runOCWebLogin(cmd *cobra.Command, args []string) error {
+	if !ocWebLoginExecCredential && !ocWebLoginForceRefreshToken {
+		slog.Warn("Deprecated: Consider using 'kharon switch' which is distribution agnostic and supports automatic token refresh.")
+	}
+
 	if len(args) == 0 {
 		if ocWebLoginExecCredential {
 			return errors.New("--exec-credential needs cluster id or api server url")
