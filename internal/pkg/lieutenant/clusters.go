@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"slices"
@@ -38,6 +39,8 @@ const (
 	KnownFactJumphost            = "jumphost"
 	KnownFactJumphostDomains     = "jumphostDomains"
 	KnownFactJumphostSkipDomains = "jumphostSkipDomains"
+
+	knownFactKharonIgnore = "kharonIgnore"
 
 	DistributionOpenshift = "openshift"
 	DistributionTalos     = "talos"
@@ -245,7 +248,14 @@ func (c *Client) Clusters(ctx context.Context) ([]Cluster, error) {
 	if err := json.NewDecoder(res.Body).Decode(&clusters); err != nil {
 		return nil, fmt.Errorf("failed to decode response body: %w", err)
 	}
-	return clusters, nil
+	return slices.DeleteFunc(
+		clusters,
+		func(c Cluster) bool {
+			_, ok, _ := c.StringFact(knownFactKharonIgnore)
+			slog.Debug("Dropping cluster due to ignore fact", "cluster_id", c.ID)
+			return ok
+		},
+	), nil
 }
 
 // FindByID searches for a cluster with the given ID in the provided slice of clusters.

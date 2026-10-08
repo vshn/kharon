@@ -13,7 +13,7 @@ import (
 	"github.com/vshn/kharon/internal/pkg/lieutenant/login"
 )
 
-func Test_Client_GetClusters(t *testing.T) {
+func Test_Client_Clusters(t *testing.T) {
 	var errResponse atomic.Pointer[string]
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/clusters" {
@@ -25,7 +25,15 @@ func Test_Client_GetClusters(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode([]Cluster{{ID: "cluster-1"}}); err != nil {
+		if err := json.NewEncoder(w).Encode([]Cluster{
+			{
+				ID: "cluster-ignore",
+				Facts: map[string]any{
+					knownFactKharonIgnore: "",
+				},
+			}, {
+				ID: "cluster-1",
+			}}); err != nil {
 			t.Log("Failed to write response:", err)
 		}
 	}))
