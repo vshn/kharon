@@ -2,6 +2,9 @@ package conntest
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"fmt"
 	"io"
 	"iter"
 	"net"
@@ -45,21 +48,16 @@ type RoutingDialer interface {
 // TestClusters tests the connectivity to the API server, console and OAuth endpoint of the given clusters using the provided HTTP client.
 // It returns a channel of reports for each cluster.
 func TestClusters(r RoutingDialer, clusters []lieutenant.Cluster) iter.Seq[Report] {
-	t := http.DefaultTransport.(*http.Transport).Clone()
-	t.Proxy = nil
-	t.DialContext = r.DialContext
+	client := httpClient(r.DialContext)
 
-	client := &http.Client{
-		Transport: t,
-		Timeout:   5 * time.Second,
-	}
 	return func(yield func(Report) bool) {
 		for _, cluster := range clusters {
 			var report Report
 			report.ClusterName = cluster.ID
-			if apiURL, _, _ := cluster.GetApiURL(); apiURL != "" {
+			if apiURL, _, _ := cluster.ApiURL(); apiURL != "" {
+				cadata, _, _ := cluster.ApiCAData()
 				report.APIServerURL = apiURL
-				report.APIServerConnectionErr = get(client, apiURL)
+				report.APIServerConnectionErr = getWithCustomCA(r.DialContext, cadata, apiURL)
 				u, err := url.Parse(apiURL)
 				if err == nil {
 					report.Jumphost = r.JumphostForHost(u.Hostname())
@@ -86,6 +84,41 @@ func TestClusters(r RoutingDialer, clusters []lieutenant.Cluster) iter.Seq[Repor
 			}
 		}
 	}
+}
+
+type dialContext func(ctx context.Context, network string, addr string) (net.Conn, error)
+
+// Warning: The [http.Client.Transport] has internal state and should be reused or [http.Client.CloseIdleConnections] should be called.
+func httpClient(dc dialContext) *http.Client {
+	t := http.DefaultTransport.(*http.Transport).Clone()
+	t.Proxy = nil
+	t.DialContext = dc
+
+	return &http.Client{
+		Transport: t,
+		Timeout:   5 * time.Second,
+	}
+}
+
+// getWithCustomCA allows an HTTP GET connection test with custom CA.
+// Creates a temporary [http.Client] but closes all connections on exit.
+func getWithCustomCA(dc dialContext, cadata []byte, apiURL string) error {
+	c := httpClient(dc)
+	defer c.CloseIdleConnections()
+
+	if len(cadata) != 0 {
+		certPool := x509.NewCertPool()
+		if !certPool.AppendCertsFromPEM(cadata) {
+			return fmt.Errorf("Unable to use custom CA, possibly malformed")
+		}
+		t := c.Transport.(*http.Transport).Clone()
+		t.TLSClientConfig = &tls.Config{
+			RootCAs: certPool,
+		}
+		c.Transport = t
+	}
+
+	return get(c, apiURL)
 }
 
 func get(client *http.Client, url string) error {

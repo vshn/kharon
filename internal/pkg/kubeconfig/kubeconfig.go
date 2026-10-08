@@ -35,13 +35,13 @@ func FromClusters(clusters []lieutenant.Cluster, proxyURL, currentContext string
 		currentContextSet = true
 	}
 	for _, c := range clusters {
-		api, _, _ := c.GetApiURL()
+		api, _, _ := c.ApiURL()
 		if api == "" {
 			continue
 		}
 		clusterName := c.ID
 		contextName := c.ID
-		caData, _, err := c.CAData()
+		caData, _, err := c.ApiCAData()
 		if err != nil {
 			slog.Warn("Failed to retrieve CA data, possibly malformed", "id", c.ID, "error", err)
 		}
@@ -203,7 +203,7 @@ func InsertConnectionInfoIntoKubeconfig(contextName, apiURL, proxyURL, token str
 // InsertConnectionInfoIntoKubeconfig inserts the given cluster into the current kubeconfig.
 // It sets the context to the given cluster.
 func InsertClusterConnectionInfo(proxyURL string, c lieutenant.Cluster) error {
-	apiURL, _, err := c.GetApiURL()
+	apiURL, _, err := c.ApiURL()
 	if err != nil {
 		return fmt.Errorf("failed to get API url for cluster %q: %w", c.ID, err)
 	}
@@ -213,7 +213,7 @@ func InsertClusterConnectionInfo(proxyURL string, c lieutenant.Cluster) error {
 
 	contextName := c.ID
 
-	caData, _, err := c.CAData()
+	caData, _, err := c.ApiCAData()
 	if err != nil {
 		return fmt.Errorf("failed to retrieve CA data for cluster %q: %w", c.ID, err)
 	}

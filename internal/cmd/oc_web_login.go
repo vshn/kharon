@@ -103,7 +103,7 @@ var ocWebLoginCmd = &cobra.Command{
 	RunE:    runOCWebLogin,
 	Args:    cobra.MaximumNArgs(1),
 	ValidArgsFunction: completion.ClusterID(clustersInventoryFile, true, func(cluster lieutenant.Cluster) bool {
-		api, _, _ := cluster.GetApiURL()
+		api, _, _ := cluster.ApiURL()
 		return api != ""
 	}),
 }
@@ -142,7 +142,7 @@ func loginWithClusterID(ctx context.Context, clusterID string) error {
 	if !found {
 		return fmt.Errorf("cluster %q not found", clusterID)
 	}
-	apiURL, _, _ := cluster.GetApiURL()
+	apiURL, _, _ := cluster.ApiURL()
 	if apiURL == "" {
 		return fmt.Errorf("cluster %q does not have a known API URL", clusterID)
 	}

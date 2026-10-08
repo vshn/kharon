@@ -28,7 +28,7 @@ const (
 	knownDynamicFactTalosApiURL     = "talosApiURL"
 	knownDynamicFactTalosBaseDomain = "talosBaseDomain"
 	knownDynamicFactTalosAppsDomain = "talosAppsDomain"
-	knownDynamicFactTalosCAData     = "talosAPICertificateAuthorityData"
+	knownDynamicFactTalosAPICAData  = "talosAPICertificateAuthorityData"
 
 	knownDynamicFactOidcClientId = "oidcClientId"
 	knownDynamicFactOidcIssuer   = "oidcIssuer"
@@ -80,7 +80,7 @@ func (c Cluster) Distribution() (string, bool, error) {
 	return dist, ok, err
 }
 
-func (c Cluster) GetApiURL() (string, bool, error) {
+func (c Cluster) ApiURL() (string, bool, error) {
 	val, ok, err := c.DynamicStringFact(knownDynamicFactOpenshiftApiURL)
 	if ok || err != nil {
 		return val, ok, err
@@ -88,17 +88,17 @@ func (c Cluster) GetApiURL() (string, bool, error) {
 	return c.DynamicStringFact(knownDynamicFactTalosApiURL)
 }
 
-func (c Cluster) ConsoleURL() (string, bool, error) {
-	return c.DynamicStringFact(knownDynamicFactOpenshiftConsoleURL)
-}
-
-func (c Cluster) CAData() ([]byte, bool, error) {
-	data, ok, err := c.DynamicStringFact(knownDynamicFactTalosCAData)
+func (c Cluster) ApiCAData() ([]byte, bool, error) {
+	data, ok, err := c.DynamicStringFact(knownDynamicFactTalosAPICAData)
 	if err != nil {
 		return nil, ok, err
 	}
 	decoded, err := base64.StdEncoding.DecodeString(data)
 	return decoded, ok, err
+}
+
+func (c Cluster) ConsoleURL() (string, bool, error) {
+	return c.DynamicStringFact(knownDynamicFactOpenshiftConsoleURL)
 }
 
 func (c Cluster) OIDCClientId() (string, bool, error) {
@@ -261,7 +261,7 @@ func FindByID(clusters []Cluster, id string) (Cluster, bool) {
 // FindByAPIURL searches for a cluster with the given OpenShift API URL in the provided slice of clusters.
 func FindByAPIURL(clusters []Cluster, apiURL string) (Cluster, bool) {
 	for _, cluster := range clusters {
-		if url, ok, _ := cluster.GetApiURL(); ok && url == apiURL {
+		if url, ok, _ := cluster.ApiURL(); ok && url == apiURL {
 			return cluster, true
 		}
 	}

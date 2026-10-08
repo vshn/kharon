@@ -1,31 +1,53 @@
 package conntest_test
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
+	"encoding/pem"
 	"errors"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"slices"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/vshn/kharon/internal/pkg/conntest"
 	"github.com/vshn/kharon/internal/pkg/lieutenant"
 )
 
 func Test_TestClusters(t *testing.T) {
+	var customCAServCalled atomic.Int32
+	defer func() {
+		require.Greater(t, customCAServCalled.Load(), int32(0))
+	}()
+
 	serv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("ok"))
 	}))
 	defer serv.Close()
 
+	customCAServ := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		customCAServCalled.Add(1)
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer customCAServ.Close()
+
+	var customCA bytes.Buffer
+	pem.Encode(base64.NewEncoder(base64.StdEncoding, &customCA), &pem.Block{Type: "CERTIFICATE", Bytes: customCAServ.TLS.Certificates[0].Certificate[0]})
+
 	dialer := mockDialer{
 		dialer: func(ctx context.Context, network, address string) (net.Conn, error) {
 			if network != "tcp" {
 				return nil, net.UnknownNetworkError(network)
+			}
+			if address == "api-talos-custom-ca.example.com:443" {
+				return net.Dial(network, customCAServ.Listener.Addr().String())
 			}
 			return net.Dial(network, serv.Listener.Addr().String())
 		},
@@ -53,6 +75,26 @@ func Test_TestClusters(t *testing.T) {
 			ID: "cluster2",
 			DynamicFacts: map[string]any{
 				"openshiftApiURL": "http://api.cluster2.example.com",
+			},
+		},
+		{
+			ID: "talos-1",
+			DynamicFacts: map[string]any{
+				"talosApiURL": "http://api.talos1.example.com",
+			},
+		},
+		{
+			ID: "talos-invalid-custom-ca",
+			DynamicFacts: map[string]any{
+				"talosApiURL":                      "http://api.talos-invalid-custom-ca.example.com",
+				"talosAPICertificateAuthorityData": "Rk9PQkFSCg==",
+			},
+		},
+		{
+			ID: "talos-custom-ca",
+			DynamicFacts: map[string]any{
+				"talosApiURL":                      "https://api-talos-custom-ca.example.com",
+				"talosAPICertificateAuthorityData": customCA.String(),
 			},
 		},
 	}))
@@ -87,6 +129,23 @@ func Test_TestClusters(t *testing.T) {
 			Jumphost:               "jumphost-for-api.cluster2.example.com",
 			APIServerURL:           "http://api.cluster2.example.com",
 			APIServerConnectionErr: nil,
+		},
+		{
+			ClusterName:            "talos-1",
+			Jumphost:               "jumphost-for-api.talos1.example.com",
+			APIServerURL:           "http://api.talos1.example.com",
+			APIServerConnectionErr: nil,
+		},
+		{
+			ClusterName:            "talos-invalid-custom-ca",
+			Jumphost:               "jumphost-for-api.talos-invalid-custom-ca.example.com",
+			APIServerURL:           "http://api.talos-invalid-custom-ca.example.com",
+			APIServerConnectionErr: errors.New("Unable to use custom CA, possibly malformed"),
+		},
+		{
+			ClusterName:  "talos-custom-ca",
+			Jumphost:     "jumphost-for-api-talos-custom-ca.example.com",
+			APIServerURL: "https://api-talos-custom-ca.example.com",
 		},
 	}, reports)
 }
