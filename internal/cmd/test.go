@@ -53,7 +53,7 @@ var testCmd = &cobra.Command{
 	Example: testCmdExample,
 	Run:     runTest,
 	ValidArgsFunction: completion.ClusterID(clustersInventoryFile, false, func(cluster lieutenant.Cluster) bool {
-		api, _, _ := cluster.GetApiURL()
+		api, _, _ := cluster.ApiURL()
 		return api != ""
 	}),
 }
@@ -104,9 +104,9 @@ func runTest(cmd *cobra.Command, args []string) {
 		}
 		fmt.Printf("%s%s\n", bold.Sprint(report.ClusterName), jumphostInfo)
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
-		_, _ = fmt.Fprintln(w, joinTabbed(errToStatus(report.APIServerConnectionErr), "API Server", report.APIServerURL, errMsg(report.APIServerConnectionErr)))
-		_, _ = fmt.Fprintln(w, joinTabbed(errToStatus(report.ConsoleConnectionErr), "Console", report.ConsoleURL, errMsg(report.ConsoleConnectionErr)))
-		_, _ = fmt.Fprintln(w, joinTabbed(errToStatus(report.OAuthConnectionErr), "OAuth", report.OAuthURL, errMsg(report.OAuthConnectionErr)))
+		_, _ = fmt.Fprintln(w, joinTabbed(errToStatus(report.APIServerConnectionErr, len(report.APIServerURL) == 0), "API Server", report.APIServerURL, errMsg(report.APIServerConnectionErr)))
+		_, _ = fmt.Fprintln(w, joinTabbed(errToStatus(report.ConsoleConnectionErr, len(report.ConsoleURL) == 0), "Console", report.ConsoleURL, errMsg(report.ConsoleConnectionErr)))
+		_, _ = fmt.Fprintln(w, joinTabbed(errToStatus(report.OAuthConnectionErr, len(report.OAuthURL) == 0), "OAuth", report.OAuthURL, errMsg(report.OAuthConnectionErr)))
 		_ = w.Flush()
 		fmt.Println()
 		if len(report.Warnings) > 0 {
@@ -133,8 +133,11 @@ func joinTabbed(cols ...string) string {
 	return strings.Join(cols, "\t")
 }
 
-func errToStatus(err error) string {
+func errToStatus(err error, skipped bool) string {
 	if err == nil {
+		if skipped {
+			return "⏩"
+		}
 		return "✅"
 	}
 	return "❌"

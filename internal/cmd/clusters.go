@@ -40,7 +40,7 @@ var clustersCmd = &cobra.Command{
 	Long:  "List clusters and their details. Works on the inventory downloaded by the `update` command, so it does not require access to the Lieutenant API.",
 	RunE:  runClusters,
 	ValidArgsFunction: completion.ClusterID(clustersInventoryFile, false, func(cluster lieutenant.Cluster) bool {
-		api, _, _ := cluster.GetApiURL()
+		api, _, _ := cluster.ApiURL()
 		return api != ""
 	}),
 }
@@ -76,7 +76,7 @@ func runClusters(cmd *cobra.Command, args []string) error {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 	_, _ = fmt.Fprintln(w, strings.Join([]string{"ID", "Display Name", "Jumphost", "Console URL"}, "\t"))
 	for _, c := range filteredClusters {
-		console, _, _ := c.GetApiURL()
+		console, _, _ := c.ApiURL()
 		jumphost, _, _ := c.StringFact(lieutenant.KnownFactJumphost)
 		_, _ = fmt.Fprintln(w, strings.Join([]string{c.ID, c.DisplayName, jumphost, console}, "\t"))
 	}

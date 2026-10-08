@@ -44,7 +44,7 @@ var switchCmd = &cobra.Command{
 	Run:     runSwitch,
 	Args:    cobra.ExactArgs(1),
 	ValidArgsFunction: completion.ClusterID(clustersInventoryFile, false, func(cluster lieutenant.Cluster) bool {
-		api, _, _ := cluster.GetApiURL()
+		api, _, _ := cluster.ApiURL()
 		return api != ""
 	}),
 }

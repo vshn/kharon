@@ -58,7 +58,7 @@ var emergencyCredentialsCmd = &cobra.Command{
 	RunE:    runEmergencyCredentials,
 	Args:    cobra.MaximumNArgs(1),
 	ValidArgsFunction: completion.ClusterID(clustersInventoryFile, true, func(cluster lieutenant.Cluster) bool {
-		api, _, _ := cluster.GetApiURL()
+		api, _, _ := cluster.ApiURL()
 		return api != ""
 	}),
 }
@@ -96,7 +96,7 @@ func runEmergencyCredentials(cmd *cobra.Command, args []string) error {
 		}
 		cluster = c
 	}
-	apiURL, _, _ := cluster.GetApiURL()
+	apiURL, _, _ := cluster.ApiURL()
 	if apiURL == "" {
 		return fmt.Errorf("cluster does not have a known API URL: %s", cluster.ID)
 	}
@@ -120,7 +120,7 @@ func runEmergencyCredentials(cmd *cobra.Command, args []string) error {
 
 	success := false
 	for i, token := range tokens {
-		caData, _, err := cluster.CAData()
+		caData, _, err := cluster.ApiCAData()
 		if err != nil {
 			slog.Warn("Failed to retrieve CA data, possibly malformed", "error", err)
 		}

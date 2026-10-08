@@ -48,7 +48,7 @@ var kubeconfigCmd = &cobra.Command{
 	Example: kubeconfigCmdExample,
 	Run:     runKubeconfig,
 	ValidArgsFunction: completion.ClusterID(clustersInventoryFile, false, func(cluster lieutenant.Cluster) bool {
-		api, _, _ := cluster.GetApiURL()
+		api, _, _ := cluster.ApiURL()
 		return api != ""
 	}),
 }
