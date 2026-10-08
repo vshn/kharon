@@ -200,7 +200,8 @@ func InsertConnectionInfoIntoKubeconfig(contextName, apiURL, proxyURL, token str
 	})
 }
 
-// InsertConnectionInfoIntoKubeconfig inserts a new into the current kubeconfig.
+// InsertConnectionInfoIntoKubeconfig inserts the given cluster into the current kubeconfig.
+// It sets the context to the given cluster.
 func InsertClusterConnectionInfo(proxyURL string, c lieutenant.Cluster) error {
 	apiURL, _, err := c.GetApiURL()
 	if err != nil {

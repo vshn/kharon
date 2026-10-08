@@ -9,6 +9,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/stretchr/testify/require"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/clientcmd"
 	kcapi "k8s.io/client-go/tools/clientcmd/api"
 	"sigs.k8s.io/yaml"
@@ -252,6 +253,75 @@ func Test_InsertConnectionInfoIntoKubeconfig(t *testing.T) {
 				t.Errorf("kubeConfig mismatch (-want +got):\n%s", diff)
 			}
 		})
+	}
+}
+
+func Test_InsertClusterConnectionInfo(t *testing.T) {
+	startingConfig := kcapi.NewConfig()
+	startingConfig.Clusters["existing-context"] = &kcapi.Cluster{
+		Server:   "https://api.existing-cluster.vshnmanaged.net:6443",
+		ProxyURL: "socks5://localhost:12000",
+	}
+	startingConfig.CurrentContext = "existing-context"
+	startingConfig.AuthInfos["existing-context"] = &kcapi.AuthInfo{
+		Token: "existing-token",
+	}
+	startingConfig.Contexts["existing-context"] = &kcapi.Context{
+		Cluster:  "existing-context",
+		AuthInfo: "existing-context",
+	}
+
+	td := t.TempDir()
+	kubeconfigPath := td + "/kubeconfig"
+	t.Setenv("KUBECONFIG", kubeconfigPath)
+	require.NoError(t, clientcmd.WriteToFile(*startingConfig, kubeconfigPath))
+
+	require.NoError(t, kubeconfig.InsertClusterConnectionInfo("socks5://localhost:12000", lieutenant.Cluster{
+		ID: "c-example-talos",
+		Facts: map[string]any{
+			"distribution": "talos",
+		},
+		DynamicFacts: map[string]any{
+			"talosApiURL":                      "https://api.c-example-talos.vshnmanaged.net:6443",
+			"talosAPICertificateAuthorityData": "Rk9PQkFSCg==",
+			"oidcIssuer":                       "https://my.keycloak.com/auth/realms/my-realm",
+			"oidcClientId":                     "client_c-example-talos",
+		},
+	}))
+
+	exe, err := os.Executable()
+	require.NoError(t, err)
+
+	expectedConfig := startingConfig.DeepCopy()
+	expectedConfig.Clusters["c-example-talos"] = &kcapi.Cluster{
+		Server:                   "https://api.c-example-talos.vshnmanaged.net:6443",
+		CertificateAuthorityData: []uint8("FOOBAR\n"),
+		ProxyURL:                 "socks5://localhost:12000",
+		Extensions:               map[string]runtime.Object{},
+	}
+	expectedConfig.AuthInfos["c-example-talos/kharon-login"] = &kcapi.AuthInfo{
+		Exec: &kcapi.ExecConfig{
+			APIVersion: "client.authentication.k8s.io/v1",
+			Command:    exe,
+			Args: []string{
+				"kubelogin",
+				"get-token",
+				"--oidc-issuer-url=https://my.keycloak.com/auth/realms/my-realm",
+				"--oidc-client-id=client_c-example-talos",
+			},
+			InteractiveMode: "Never",
+		},
+	}
+	expectedConfig.Contexts["c-example-talos"] = &kcapi.Context{
+		Cluster:  "c-example-talos",
+		AuthInfo: "c-example-talos/kharon-login",
+	}
+	expectedConfig.CurrentContext = "c-example-talos"
+
+	kubeConfig, err := new(clientcmd.ClientConfigLoadingRules{ExplicitPath: kubeconfigPath}).Load()
+	require.NoError(t, err)
+	if diff := cmp.Diff(expectedConfig, kubeConfig, kubeconfigDiffOptions()); diff != "" {
+		t.Errorf("kubeConfig mismatch (-want +got):\n%s", diff)
 	}
 }
 
