@@ -196,11 +196,6 @@ func (c Cluster) ClusterDomains() (baseDomain string, additionalDomains []string
 
 }
 
-func (c Cluster) UseOIDC() bool {
-	dist, _, _ := c.Distribution()
-	return dist == DistributionTalos
-}
-
 func hasBaseDomain(domain, base string) bool {
 	if base == "" {
 		return false

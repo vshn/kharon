@@ -5,12 +5,12 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -22,50 +22,45 @@ import (
 )
 
 var (
-	errForbidden     = fmt.Errorf("access forbidden")
 	tokenRequestFunc = tokenrequest.RequestTokenWithLocalCallback
 )
 
-// EnsureToken checks if the provided token is valid and not expiring soon.
-// If the token is valid, it returns the token.
-// If the token is invalid or expiring soon, it requests a new token using the provided API URL and Identity Provider (IDP) name.
-// If the token is empty, it will attempt to retrieve a cached token for the given API URL before checking its validity.
-func EnsureToken(ctx context.Context, token, apiURL, idp string) (string, error) {
+// VerifyToken checks if the provided token is valid and not expiring soon.
+// The check runs against the API Server.
+func VerifyToken(ctx context.Context, token, apiURL string) (ok bool, err error) {
 	if token == "" {
+		return false, err
+	}
+	cfg := &rest.Config{
+		Host:        apiURL,
+		BearerToken: token,
+	}
+	expiry, err := getTokenExpiry(ctx, cfg, token)
+	if err != nil {
+		return false, fmt.Errorf("failed to get token expiry: %w", err)
+	} else if expiresSoon(expiry) {
+		return false, nil
+	}
+	return true, nil
+}
+
+// Token returns a non-expired token from cache or the API Server.
+func Token(ctx context.Context, apiURL, idp string, refresh bool) (string, time.Time, error) {
+	if !refresh {
 		cachedToken, err := cache.GetToken(apiURL)
 		if err != nil {
-			return "", fmt.Errorf("failed to get cached token: %w", err)
+			return "", time.Time{}, fmt.Errorf("failed to get cached token: %w", err)
 		}
-		if cachedToken != "" {
-			slog.Debug("Found cached token, checking validity", "api_url", apiURL)
-		}
-		token = cachedToken
-	}
-	if token != "" {
-		cfg := &rest.Config{
-			Host:        apiURL,
-			BearerToken: token,
-		}
-		expiry, err := getTokenExpiry(ctx, cfg, token)
-		if err != nil && errors.Is(err, errForbidden) {
-			slog.Debug("Can't determine token expiry because access is forbidden. Falling back to SSR.", "error", err)
-			ok, ssrErr := lightSSR(ctx, cfg)
-			if ssrErr != nil {
-				return "", fmt.Errorf("failed to perform SelfSubjectReview: %w", ssrErr)
-			}
-			if ok {
-				return token, nil
-			}
-		} else if err != nil {
-			return "", fmt.Errorf("failed to get token expiry: %w", err)
-		} else if expiry > time.Hour {
-			return token, nil
+		if cachedToken != (cache.Entry{}) && !expiresSoon(cachedToken.Expiry) {
+			slog.Debug("Found valid cached token", "api_url", apiURL, "expiry", cachedToken.Expiry)
+			return cachedToken.Token, cachedToken.Expiry, nil
 		}
 	}
+
 	return requestToken(ctx, apiURL, idp)
 }
 
-func getTokenExpiry(ctx context.Context, cfg *rest.Config, token string) (time.Duration, error) {
+func getTokenExpiry(ctx context.Context, cfg *rest.Config, token string) (time.Time, error) {
 	const sha256Prefix = "sha256~"
 
 	type response struct {
@@ -81,81 +76,43 @@ func getTokenExpiry(ctx context.Context, cfg *rest.Config, token string) (time.D
 
 	c, err := rest.HTTPClientFor(cfg)
 	if err != nil {
-		return 0, fmt.Errorf("failed to create HTTP client for kubeconfig: %w", err)
+		return time.Time{}, fmt.Errorf("failed to create HTTP client for kubeconfig: %w", err)
 	}
 	url, _, err := rest.DefaultServerUrlFor(cfg)
 	if err != nil {
-		return 0, fmt.Errorf("failed to determine API server URL from kubeconfig: %w", err)
+		return time.Time{}, fmt.Errorf("failed to determine API server URL from kubeconfig: %w", err)
 	}
-	url.Path = "/apis/oauth.openshift.io/v1/oauthaccesstokens/" + tokenName
+	url.Path = "/apis/oauth.openshift.io/v1/useroauthaccesstokens/" + tokenName
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url.String(), nil)
 	if err != nil {
-		return 0, fmt.Errorf("failed to create HTTP request: %w", err)
+		return time.Time{}, fmt.Errorf("failed to create HTTP request: %w", err)
 	}
-	req.Header.Set("Impersonate-User", "system:admin")
 	resp, err := c.Do(req)
 	if err != nil {
-		return 0, fmt.Errorf("failed to perform HTTP request: %w", err)
+		return time.Time{}, fmt.Errorf("failed to perform HTTP request: %w", err)
 	}
 	defer func() {
 		_, _ = io.Copy(io.Discard, resp.Body)
 		_ = resp.Body.Close()
 	}()
 	if resp.StatusCode != http.StatusOK {
-		if resp.StatusCode == http.StatusForbidden {
-			return 0, errForbidden
-		}
-		if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusUnauthorized {
-			return 0, nil
+		if resp.StatusCode == http.StatusUnauthorized {
+			slog.Warn("token not authorized")
+			return time.Time{}, nil
 		}
 		body, _ := io.ReadAll(resp.Body)
-		return 0, fmt.Errorf("unexpected status code: %d, body: %s", resp.StatusCode, string(body))
+		return time.Time{}, fmt.Errorf("unexpected status code: %d, body: %s", resp.StatusCode, string(body))
 	}
 
 	var r response
 	if err := json.NewDecoder(resp.Body).Decode(&r); err != nil {
-		return 0, fmt.Errorf("failed to decode response body: %w", err)
+		return time.Time{}, fmt.Errorf("failed to decode response body: %w", err)
 	}
 
-	expiry := time.Until(r.Metadata.CreationTimestamp.Add(time.Duration(r.ExpiresIn) * time.Second))
-	return expiry, nil
+	return r.Metadata.CreationTimestamp.Add(time.Duration(r.ExpiresIn) * time.Second), nil
 }
 
-// Including the openshift or kubenetes client more than doubles the size of the binary, so we implement a very minimal version of the SelfSubjectReview API call.
-func lightSSR(ctx context.Context, cfg *rest.Config) (ok bool, err error) {
-	c, err := rest.HTTPClientFor(cfg)
-	if err != nil {
-		return false, fmt.Errorf("failed to create HTTP client for kubeconfig: %w", err)
-	}
-	url, _, err := rest.DefaultServerUrlFor(cfg)
-	if err != nil {
-		return false, fmt.Errorf("failed to determine API server URL from kubeconfig: %w", err)
-	}
-	url.Path = "/apis/authentication.k8s.io/v1/selfsubjectreviews"
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url.String(), strings.NewReader(`{"kind":"SelfSubjectReview","apiVersion":"authentication.k8s.io/v1"}`))
-	if err != nil {
-		return false, fmt.Errorf("failed to create HTTP request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := c.Do(req)
-	if err != nil {
-		return false, fmt.Errorf("failed to perform HTTP request: %w", err)
-	}
-	defer func() {
-		_, _ = io.Copy(io.Discard, resp.Body)
-		_ = resp.Body.Close()
-	}()
-	if resp.StatusCode == http.StatusCreated {
-		return true, nil
-	}
-	if resp.StatusCode == http.StatusUnauthorized {
-		return false, nil
-	}
-	body, _ := io.ReadAll(resp.Body)
-	return false, fmt.Errorf("unexpected status code: %d, body: %s", resp.StatusCode, string(body))
-}
-
-func requestToken(ctx context.Context, apiURL, idp string) (string, error) {
+func requestToken(ctx context.Context, apiURL, idp string) (string, time.Time, error) {
 	tok, err := tokenRequestFunc(&rest.Config{
 		Host: apiURL,
 	}, func(url *url.URL) error {
@@ -164,13 +121,33 @@ func requestToken(ctx context.Context, apiURL, idp string) (string, error) {
 			q.Set("idp", idp)
 			url.RawQuery = q.Encode()
 		}
-		return browser.OpenURL(ctx, url.String())
+		return new(browser.Browser{
+			Stdout: os.Stderr,
+			Stderr: os.Stderr,
+		}).OpenURL(ctx, url.String())
 	}, 0)
 	if err != nil {
-		return "", err
+		return "", time.Time{}, err
 	}
-	if err := cache.WriteToken(apiURL, tok); err != nil {
+	expiry, err := getTokenExpiry(ctx, &rest.Config{
+		Host:        apiURL,
+		BearerToken: tok,
+	}, tok)
+	if err != nil {
+		return "", time.Time{}, fmt.Errorf("failed to get expiry for newly created token: %w", err)
+	}
+	if expiresSoon(expiry) {
+		return "", time.Time{}, fmt.Errorf("newly created token expires too soon at %s", expiry.Format(time.RFC3339))
+	}
+	if err := cache.WriteToken(apiURL, cache.Entry{
+		Expiry: expiry,
+		Token:  tok,
+	}); err != nil {
 		slog.Warn("Failed to cache token", "error", err)
 	}
-	return tok, nil
+	return tok, expiry, nil
+}
+
+func expiresSoon(expiry time.Time) bool {
+	return time.Until(expiry) <= time.Hour
 }

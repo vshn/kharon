@@ -70,7 +70,7 @@ kharon shell
 or login to your cluster of choice directly (the APPUiO lab cluster is a good candidate for testing):
 
 ```sh
-kharon oc-web-login c-appuio-lab-cloudscale-rma-0
+kharon switch c-appuio-lab-cloudscale-rma-0
 ```
 
 ### Tips and tricks

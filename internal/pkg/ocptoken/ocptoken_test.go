@@ -16,112 +16,65 @@ import (
 	"github.com/vshn/kharon/internal/pkg/cache"
 )
 
-func Test_EnsureToken(t *testing.T) {
-	t.Run("returns existing token when oauth token has enough validity", func(t *testing.T) {
+func Test_VerifyToken(t *testing.T) {
+	t.Run("valid token", func(t *testing.T) {
 		mockUserHomeDir(t)
 
-		mockTokenRequestFunc(t, func(clientCfg *rest.Config, authzURLHandler tokenrequest.AuthorizationURLHandlerFunc, callbackPort int) (string, error) {
-			return "", errors.New("must not be called")
-		})
-
-		token := "sha256~valid-token"
 		srv := newMockAPIServer(t,
 			func(w http.ResponseWriter, r *http.Request) {
-				require.Equal(t, "system:admin", r.Header.Get("Impersonate-User"))
 				writeTokenResponse(t, w, time.Now().Add(-10*time.Minute), 3*60*60)
 			},
-			nil,
 		)
 
-		got, err := EnsureToken(context.Background(), token, srv.URL, "")
+		ok, err := VerifyToken(context.Background(), "valid", srv.URL)
 		require.NoError(t, err)
-		require.Equal(t, token, got)
+		require.True(t, ok)
 	})
 
-	t.Run("requests a new token and caches it when oauth token is expired", func(t *testing.T) {
+	t.Run("valid token, not enough expiry left", func(t *testing.T) {
 		mockUserHomeDir(t)
-
-		mockTokenRequestFunc(t, func(clientCfg *rest.Config, authzURLHandler tokenrequest.AuthorizationURLHandlerFunc, callbackPort int) (string, error) {
-			return "new-token", nil
-		})
 
 		srv := newMockAPIServer(t,
 			func(w http.ResponseWriter, r *http.Request) {
-				writeTokenResponse(t, w, time.Now().Add(-2*time.Hour), 3600)
-			},
-			nil,
-		)
-
-		got, err := EnsureToken(context.Background(), "sha256~expired-token", srv.URL, "")
-		require.NoError(t, err)
-		require.Equal(t, "new-token", got)
-		cached, err := cache.GetToken(srv.URL)
-		require.NoError(t, err)
-		require.Equal(t, "new-token", cached)
-	})
-
-	t.Run("returns existing token when token lookup is forbidden but SSR succeeds", func(t *testing.T) {
-		mockUserHomeDir(t)
-
-		mockTokenRequestFunc(t, func(clientCfg *rest.Config, authzURLHandler tokenrequest.AuthorizationURLHandlerFunc, callbackPort int) (string, error) {
-			return "", errors.New("must not be called")
-		})
-
-		token := "sha256~forbidden-token"
-		srv := newMockAPIServer(t,
-			func(w http.ResponseWriter, r *http.Request) {
-				w.WriteHeader(http.StatusForbidden)
-			},
-			func(w http.ResponseWriter, r *http.Request) {
-				w.WriteHeader(http.StatusCreated)
+				writeTokenResponse(t, w, time.Now().Add(-10*time.Minute), 60*60)
 			},
 		)
 
-		got, err := EnsureToken(context.Background(), token, srv.URL, "")
+		ok, err := VerifyToken(context.Background(), "valid", srv.URL)
 		require.NoError(t, err)
-		require.Equal(t, token, got)
+		require.False(t, ok)
 	})
 
-	t.Run("requests new token when token lookup is forbidden and SSR is unauthorized", func(t *testing.T) {
+	t.Run("expired token", func(t *testing.T) {
 		mockUserHomeDir(t)
-
-		mockTokenRequestFunc(t, func(clientCfg *rest.Config, authzURLHandler tokenrequest.AuthorizationURLHandlerFunc, callbackPort int) (string, error) {
-			return "new-token-after-ssr", nil
-		})
 
 		srv := newMockAPIServer(t,
 			func(w http.ResponseWriter, r *http.Request) {
-				w.WriteHeader(http.StatusForbidden)
-			},
-			func(w http.ResponseWriter, r *http.Request) {
-				w.WriteHeader(http.StatusUnauthorized)
+				writeTokenResponse(t, w, time.Now().Add(-12*time.Hour), 60*60)
 			},
 		)
 
-		got, err := EnsureToken(context.Background(), "sha256~forbidden-token", srv.URL, "")
+		ok, err := VerifyToken(context.Background(), "expired", srv.URL)
 		require.NoError(t, err)
-		require.Equal(t, "new-token-after-ssr", got)
+		require.False(t, ok)
 	})
 
-	t.Run("requests new token when token lookup fails with unauthorized SSR", func(t *testing.T) {
+	t.Run("invalid token", func(t *testing.T) {
 		mockUserHomeDir(t)
-
-		mockTokenRequestFunc(t, func(clientCfg *rest.Config, authzURLHandler tokenrequest.AuthorizationURLHandlerFunc, callbackPort int) (string, error) {
-			return "new-token", nil
-		})
 
 		srv := newMockAPIServer(t,
 			func(w http.ResponseWriter, r *http.Request) {
-				w.WriteHeader(http.StatusUnauthorized)
+				http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			},
-			nil,
 		)
 
-		got, err := EnsureToken(context.Background(), "sha256~unauthorized-token", srv.URL, "")
+		ok, err := VerifyToken(context.Background(), "expired", srv.URL)
 		require.NoError(t, err)
-		require.Equal(t, "new-token", got)
+		require.False(t, ok)
 	})
+}
 
+func Test_Token(t *testing.T) {
 	t.Run("uses cached token when it is valid", func(t *testing.T) {
 		mockUserHomeDir(t)
 
@@ -131,33 +84,97 @@ func Test_EnsureToken(t *testing.T) {
 
 		srv := newMockAPIServer(t,
 			func(w http.ResponseWriter, r *http.Request) {
-				require.Equal(t, "system:admin", r.Header.Get("Impersonate-User"))
-				writeTokenResponse(t, w, time.Now().Add(-10*time.Minute), 3*60*60)
+				http.Error(w, "Must not be called - token expiry lookup is local", http.StatusInternalServerError)
 			},
-			nil,
 		)
 
 		token := "sha256~cached-token"
-		require.NoError(t, cache.WriteToken(srv.URL, token))
+		require.NoError(t, cache.WriteToken(srv.URL, cache.Entry{
+			Expiry: time.Now().Add(12 * time.Hour),
+			Token:  token,
+		}))
 
-		got, err := EnsureToken(context.Background(), "", srv.URL, "")
+		got, expiry, err := Token(context.Background(), srv.URL, "", false)
 		require.NoError(t, err)
 		require.Equal(t, token, got)
+		require.True(t, expiry.After(time.Now()), "expected cached token expiry to be in the future")
+	})
+
+	t.Run("requests new token when cached token is expired", func(t *testing.T) {
+		mockUserHomeDir(t)
+
+		mockTokenRequestFunc(t, func(clientCfg *rest.Config, authzURLHandler tokenrequest.AuthorizationURLHandlerFunc, callbackPort int) (string, error) {
+			return "new-token", nil
+		})
+
+		srv := newMockAPIServer(t,
+			func(w http.ResponseWriter, r *http.Request) {
+				writeTokenResponse(t, w, time.Now().Add(-2*time.Hour), 3600*12)
+			},
+		)
+
+		token := "sha256~cached-token"
+		require.NoError(t, cache.WriteToken(srv.URL, cache.Entry{
+			Expiry: time.Now().Add(15 * time.Minute),
+			Token:  token,
+		}))
+
+		got, expiry, err := Token(context.Background(), srv.URL, "", false)
+		require.NoError(t, err)
+		require.Equal(t, "new-token", got)
+		require.True(t, expiry.After(time.Now()), "expected token expiry to be in the future")
+	})
+
+	t.Run("requests new token when no cached token is available", func(t *testing.T) {
+		mockUserHomeDir(t)
+
+		mockTokenRequestFunc(t, func(clientCfg *rest.Config, authzURLHandler tokenrequest.AuthorizationURLHandlerFunc, callbackPort int) (string, error) {
+			return "new-token", nil
+		})
+
+		srv := newMockAPIServer(t,
+			func(w http.ResponseWriter, r *http.Request) {
+				writeTokenResponse(t, w, time.Now().Add(-2*time.Hour), 3600*12)
+			},
+		)
+
+		got, expiry, err := Token(context.Background(), srv.URL, "", false)
+		require.NoError(t, err)
+		require.Equal(t, "new-token", got)
+		require.True(t, expiry.After(time.Now()), "expected token expiry to be in the future")
+	})
+
+	t.Run("requests new token when refresh is true", func(t *testing.T) {
+		mockUserHomeDir(t)
+
+		mockTokenRequestFunc(t, func(clientCfg *rest.Config, authzURLHandler tokenrequest.AuthorizationURLHandlerFunc, callbackPort int) (string, error) {
+			return "new-token", nil
+		})
+
+		srv := newMockAPIServer(t,
+			func(w http.ResponseWriter, r *http.Request) {
+				writeTokenResponse(t, w, time.Now().Add(-2*time.Hour), 3600*12)
+			},
+		)
+
+		require.NoError(t, cache.WriteToken(srv.URL, cache.Entry{
+			Expiry: time.Now().Add(12 * time.Hour),
+			Token:  "refreshed",
+		}))
+
+		got, expiry, err := Token(context.Background(), srv.URL, "", true)
+		require.NoError(t, err)
+		require.Equal(t, "new-token", got)
+		require.True(t, expiry.After(time.Now()), "expected token expiry to be in the future")
 	})
 }
 
-func newMockAPIServer(t *testing.T, tokenHandler http.HandlerFunc, ssrHandler http.HandlerFunc) *httptest.Server {
+func newMockAPIServer(t *testing.T, tokenHandler http.HandlerFunc) *httptest.Server {
 	t.Helper()
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /apis/oauth.openshift.io/v1/oauthaccesstokens/{token}", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /apis/oauth.openshift.io/v1/useroauthaccesstokens/{token}", func(w http.ResponseWriter, r *http.Request) {
 		tokenHandler(w, r)
-	})
-	mux.HandleFunc("POST /apis/authentication.k8s.io/v1/selfsubjectreviews", func(w http.ResponseWriter, r *http.Request) {
-		if ssrHandler == nil {
-			t.Fatalf("unexpected SSR call")
-		}
-		ssrHandler(w, r)
 	})
 
 	srv := httptest.NewServer(mux)
@@ -173,7 +190,7 @@ func mockUserHomeDir(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", home)
 }
 
-func writeTokenResponse(t *testing.T, w http.ResponseWriter, creationTimestamp time.Time, expiresIn int) {
+func writeTokenResponse(t *testing.T, w http.ResponseWriter, creationTimestamp time.Time, expiresInSeconds int) {
 	t.Helper()
 
 	w.Header().Set("Content-Type", "application/json")
@@ -181,7 +198,7 @@ func writeTokenResponse(t *testing.T, w http.ResponseWriter, creationTimestamp t
 		"metadata": map[string]any{
 			"creationTimestamp": creationTimestamp.UTC().Format(time.RFC3339),
 		},
-		"expiresIn": expiresIn,
+		"expiresIn": expiresInSeconds,
 	}))
 }
 

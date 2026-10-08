@@ -1,6 +1,7 @@
 package kubeconfig
 
 import (
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -10,6 +11,8 @@ import (
 	"strings"
 	"sync"
 
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/clientcmd"
 	model "k8s.io/client-go/tools/clientcmd/api"
 	clientcmdlatest "k8s.io/client-go/tools/clientcmd/api/latest"
@@ -42,7 +45,7 @@ func FromClusters(clusters []lieutenant.Cluster, proxyURL, currentContext string
 		if err != nil {
 			slog.Warn("Failed to retrieve CA data, possibly malformed", "id", c.ID, "error", err)
 		}
-		authInfo, err := getAuthInfo(c)
+		authInfo, err := getAuthInfo(api, c)
 		if err != nil {
 			slog.Warn("Failed to build AuthInfo for cluster", "id", c.ID, "error", err)
 			continue
@@ -67,47 +70,72 @@ func FromClusters(clusters []lieutenant.Cluster, proxyURL, currentContext string
 
 var osExecutable = sync.OnceValues(os.Executable)
 
-func getAuthInfo(c lieutenant.Cluster) (*model.AuthInfo, error) {
-	const authInfoName = "anonymous"
-	if !c.UseOIDC() {
+func getAuthInfo(apiurl string, c lieutenant.Cluster) (*model.AuthInfo, error) {
+	dist, _, err := c.Distribution()
+	if err != nil {
+		return nil, fmt.Errorf("failed to determine distribution: %w", err)
+	}
+
+	switch dist {
+	case lieutenant.DistributionOpenshift:
+		exe, err := osExecutable()
+		if err != nil {
+			return nil, fmt.Errorf("unable to retrieve executable path: %w", err)
+		}
+
 		return &model.AuthInfo{
-			Username: authInfoName,
+			Exec: &model.ExecConfig{
+				Command:            exe,
+				APIVersion:         "client.authentication.k8s.io/v1",
+				InteractiveMode:    model.NeverExecInteractiveMode,
+				ProvideClusterInfo: false,
+				Args: []string{
+					"oc-web-login",
+					apiurl,
+					"--exec-credential",
+				},
+			},
+		}, nil
+	case lieutenant.DistributionTalos:
+		oidcClientId, ok, err := c.OIDCClientId()
+		if err != nil || !ok {
+			if err == nil {
+				err = errors.New("cluster has no OIDC client id fact")
+			}
+			return nil, fmt.Errorf("unable to retrieve OIDC client id for cluster %s: %w", c.ID, err)
+		}
+		oidcIssuer, ok, err := c.OIDCIssuer()
+		if err != nil || !ok {
+			if err == nil {
+				err = errors.New("cluster has no OIDC issuer fact")
+			}
+			return nil, fmt.Errorf("unable to retrieve OIDC issuer for cluster %s: %w", c.ID, err)
+		}
+
+		exe, err := osExecutable()
+		if err != nil {
+			return nil, fmt.Errorf("unable to retrieve executable path: %w", err)
+		}
+
+		return &model.AuthInfo{
+			Exec: &model.ExecConfig{
+				Command:            exe,
+				APIVersion:         "client.authentication.k8s.io/v1",
+				InteractiveMode:    model.NeverExecInteractiveMode,
+				ProvideClusterInfo: false,
+				Args: []string{
+					"kubelogin",
+					"get-token",
+					fmt.Sprintf("--oidc-issuer-url=%s", oidcIssuer),
+					fmt.Sprintf("--oidc-client-id=%s", oidcClientId),
+				},
+			},
 		}, nil
 	}
 
-	oidcClientId, ok, err := c.OIDCClientId()
-	if err != nil || !ok {
-		if err == nil {
-			err = errors.New("cluster has no OIDC client id fact")
-		}
-		return nil, fmt.Errorf("unable to retrieve OIDC client id for cluster %s: %w", c.ID, err)
-	}
-	oidcIssuer, ok, err := c.OIDCIssuer()
-	if err != nil || !ok {
-		if err == nil {
-			err = errors.New("cluster has no OIDC issuer fact")
-		}
-		return nil, fmt.Errorf("unable to retrieve OIDC issuer for cluster %s: %w", c.ID, err)
-	}
-
-	exe, err := osExecutable()
-	if err != nil {
-		return nil, fmt.Errorf("unable to retrieve executable path: %w", err)
-	}
-
+	slog.Warn("Unsupported distribution, using empty auth config", "id", c.ID, "distribution", dist)
 	return &model.AuthInfo{
-		Exec: &model.ExecConfig{
-			Command:            exe,
-			APIVersion:         "client.authentication.k8s.io/v1",
-			InteractiveMode:    model.NeverExecInteractiveMode,
-			ProvideClusterInfo: false,
-			Args: []string{
-				"kubelogin",
-				"get-token",
-				fmt.Sprintf("--oidc-issuer-url=%s", oidcIssuer),
-				fmt.Sprintf("--oidc-client-id=%s", oidcClientId),
-			},
-		},
+		Username: "anonymous",
 	}, nil
 }
 
@@ -152,6 +180,8 @@ func InsertConnectionInfoIntoKubeconfig(contextName, apiURL, proxyURL, token str
 	}
 
 	return updateKubeconfig(func(config *model.Config) error {
+		setLastContext(config, config.CurrentContext)
+
 		authInfoName := authInfoName(contextName)
 		config.Clusters[contextName] = &model.Cluster{
 			Server:                   apiURL,
@@ -170,10 +200,102 @@ func InsertConnectionInfoIntoKubeconfig(contextName, apiURL, proxyURL, token str
 	})
 }
 
+// InsertConnectionInfoIntoKubeconfig inserts the given cluster into the current kubeconfig.
+// It sets the context to the given cluster.
+func InsertClusterConnectionInfo(proxyURL string, c lieutenant.Cluster) error {
+	apiURL, _, err := c.GetApiURL()
+	if err != nil {
+		return fmt.Errorf("failed to get API url for cluster %q: %w", c.ID, err)
+	}
+	if apiURL == "" {
+		return fmt.Errorf("cluster %q has no known API url", err)
+	}
+
+	contextName := c.ID
+
+	caData, _, err := c.CAData()
+	if err != nil {
+		return fmt.Errorf("failed to retrieve CA data for cluster %q: %w", c.ID, err)
+	}
+
+	authInfo, err := getAuthInfo(apiURL, c)
+	if err != nil {
+		return fmt.Errorf("failed to retrieve AuthInfo for cluster %q: %w", c.ID, err)
+	}
+
+	return updateKubeconfig(func(config *model.Config) error {
+		setLastContext(config, config.CurrentContext)
+
+		authInfoName := authInfoName(contextName)
+		config.Clusters[contextName] = &model.Cluster{
+			Server:                   apiURL,
+			ProxyURL:                 proxyURL,
+			CertificateAuthorityData: caData,
+		}
+		config.Contexts[contextName] = &model.Context{
+			Cluster:  contextName,
+			AuthInfo: authInfoName,
+		}
+		config.AuthInfos[authInfoName] = authInfo
+		config.CurrentContext = contextName
+
+		return nil
+	})
+}
+
+// RestoreLastContext restores the context before the last kubectl write by this package
+func RestoreLastContext() error {
+	return updateKubeconfig(func(config *model.Config) error {
+		lastCtx, err := getLastContext(config)
+		if err != nil {
+			return fmt.Errorf("failed to get last context: %w", err)
+		}
+		setLastContext(config, config.CurrentContext)
+		config.CurrentContext = lastCtx
+
+		return nil
+	})
+}
+
+func setLastContext(config *model.Config, context string) {
+	obj := &unstructured.Unstructured{
+		Object: map[string]any{
+			"apiVersion": "kharon.vshn.io/v1beta1",
+			"kind":       "LastContext",
+			"spec": map[string]any{
+				"lastContext": context,
+			},
+		},
+	}
+
+	ext := config.Preferences.Extensions
+	if ext == nil {
+		ext = make(map[string]runtime.Object)
+	}
+	ext["kharon.vshn.io/last-context"] = obj
+	config.Preferences.Extensions = ext
+}
+
+func getLastContext(config *model.Config) (string, error) {
+	rawExt := config.Preferences.Extensions["kharon.vshn.io/last-context"]
+	runtimeExt, ok := rawExt.(*runtime.Unknown)
+	if !ok {
+		return "", fmt.Errorf("unexpected type %T, expected *runtime.Unknown", rawExt)
+	}
+	var stor unstructured.Unstructured
+	if err := json.Unmarshal(runtimeExt.Raw, &stor); err != nil {
+		return "", fmt.Errorf("failed to unmarshal raw extension: %w", err)
+	}
+	lastContext, _, err := unstructured.NestedString(stor.Object, "spec", "lastContext")
+	return lastContext, err
+}
+
 // SetCurrentContext sets the current context in the kubeconfig to the given context name.
 // It returns an error if the context does not exist in the kubeconfig.
 func SetCurrentContext(contextName string) error {
 	return updateKubeconfig(func(config *model.Config) error {
+		setLastContext(config, config.CurrentContext)
+
 		if _, ok := config.Contexts[contextName]; !ok {
 			return fmt.Errorf("context %q not found in kubeconfig", contextName)
 		}

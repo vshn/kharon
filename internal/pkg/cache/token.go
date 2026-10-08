@@ -3,27 +3,38 @@ package cache
 import (
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/json/v2"
+	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 )
 
-func GetToken(apiURL string) (string, error) {
+type Entry struct {
+	Expiry time.Time
+	Token  string
+}
+
+// GetToken retrieves a cached token for the API URL.
+// It does not care about [Entry.Expiry].
+func GetToken(apiURL string) (Entry, error) {
 	tokenFile, err := tokenCacheFile(apiURL)
 	if err != nil {
-		return "", err
+		return Entry{}, err
 	}
 
 	data, err := os.ReadFile(tokenFile)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return "", nil // No token cached, return empty string without error
+			return Entry{}, nil // No token cached, return empty string without error
 		}
-		return "", err
+		return Entry{}, err
 	}
-	return string(data), nil
+	var entry Entry
+	return entry, json.Unmarshal(data, &entry)
 }
 
-func WriteToken(apiURL, token string) error {
+func WriteToken(apiURL string, token Entry) error {
 	tokenFile, err := tokenCacheFile(apiURL)
 	if err != nil {
 		return err
@@ -33,7 +44,12 @@ func WriteToken(apiURL, token string) error {
 		return err
 	}
 
-	return os.WriteFile(tokenFile, []byte(token), 0600)
+	raw, err := json.Marshal(token)
+	if err != nil {
+		return fmt.Errorf("failed to marshal token: %w", err)
+	}
+
+	return os.WriteFile(tokenFile, raw, 0600)
 }
 
 func tokenCacheFile(apiURL string) (string, error) {
@@ -44,7 +60,7 @@ func tokenCacheFile(apiURL string) (string, error) {
 
 	b := sha256.Sum256([]byte(apiURL))
 	hash := base64.RawURLEncoding.EncodeToString(b[:])
-	filename := "token_" + hash
+	filename := "token_v2_" + hash
 
 	return filepath.Join(cd, "tokens", filename), nil
 }
