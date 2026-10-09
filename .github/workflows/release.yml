@@ -14,10 +14,11 @@ jobs:
     runs-on: ${{ matrix.platform.runner }}
     strategy:
       matrix:
+        # TODO(bastjan) make runner references renovatable the same as non-matrix ones
         platform:
-          - runner: ubuntu-24.04-arm
+          - runner: ubuntu-26.04-arm
             target: linux-aarch64
-          - runner: ubuntu-24.04
+          - runner: ubuntu-26.04
             target: linux-x86_64
           - runner: macos-26
             target: darwin-aarch64
