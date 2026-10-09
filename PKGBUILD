@@ -1,5 +1,5 @@
 pkgname=kharon
-pkgver=2.0.0
+pkgver=2.0.1
 pkgrel=1
 pkgdesc="Ferries your connections safely across SSH jumphosts into private networks"
 arch=('x86_64' 'aarch64')
