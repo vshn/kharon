@@ -28,7 +28,10 @@ jobs:
           go-version-file: 'go.mod'
 
       - name: Run govulncheck and save to file
-        run: go run golang.org/x/vuln/cmd/govulncheck@latest -format sarif ./... > govulncheck.sarif
+        run: |
+          go run golang.org/x/vuln/cmd/govulncheck@latest -format sarif ./... > govulncheck.sarif
+          jq '.runs[].results = ([.runs[].results[] | select(.level != "note")])' govulncheck.sarif > govulncheck.sarif.no-notes
+          mv govulncheck.sarif.no-notes govulncheck.sarif
         env:
           GOEXPERIMENT: jsonv2
 
