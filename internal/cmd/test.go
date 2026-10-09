@@ -12,11 +12,11 @@ import (
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/labels"
 
-	"github.com/vshn/kharon/internal/pkg/cache"
-	"github.com/vshn/kharon/internal/pkg/completion"
-	"github.com/vshn/kharon/internal/pkg/conntest"
-	"github.com/vshn/kharon/internal/pkg/lieutenant"
-	"github.com/vshn/kharon/internal/pkg/proxy"
+	"github.com/vshn/kharon/v2/internal/pkg/cache"
+	"github.com/vshn/kharon/v2/internal/pkg/completion"
+	"github.com/vshn/kharon/v2/internal/pkg/conntest"
+	"github.com/vshn/kharon/v2/internal/pkg/lieutenant"
+	"github.com/vshn/kharon/v2/internal/pkg/proxy"
 )
 
 const testCmdLongDesc = `Test cluster connections to all clusters in the inventory, optionally filtered by a pattern.

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/vshn/kharon/internal/pkg/proxy/mapping"
+	"github.com/vshn/kharon/v2/internal/pkg/proxy/mapping"
 )
 
 // ProxyMappingFileVersion is the version of the proxy file format. It can be used to detect incompatible changes in the file format.

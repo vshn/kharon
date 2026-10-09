@@ -12,11 +12,11 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
-	"github.com/vshn/kharon/internal/pkg/cache"
-	"github.com/vshn/kharon/internal/pkg/completion"
-	"github.com/vshn/kharon/internal/pkg/emcred"
-	"github.com/vshn/kharon/internal/pkg/kubeconfig"
-	"github.com/vshn/kharon/internal/pkg/lieutenant"
+	"github.com/vshn/kharon/v2/internal/pkg/cache"
+	"github.com/vshn/kharon/v2/internal/pkg/completion"
+	"github.com/vshn/kharon/v2/internal/pkg/emcred"
+	"github.com/vshn/kharon/v2/internal/pkg/kubeconfig"
+	"github.com/vshn/kharon/v2/internal/pkg/lieutenant"
 )
 
 func init() {

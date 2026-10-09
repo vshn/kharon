@@ -11,9 +11,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/vshn/kharon/internal/pkg/cache"
-	"github.com/vshn/kharon/internal/pkg/lieutenant"
-	"github.com/vshn/kharon/internal/pkg/proxy/mapping"
+	"github.com/vshn/kharon/v2/internal/pkg/cache"
+	"github.com/vshn/kharon/v2/internal/pkg/lieutenant"
+	"github.com/vshn/kharon/v2/internal/pkg/proxy/mapping"
 )
 
 const defaultLieutenantURL = "https://api.syn.vshn.net"

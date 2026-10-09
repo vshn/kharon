@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"k8s.io/client-go/rest"
 
-	"github.com/vshn/kharon/internal/pkg/cache"
+	"github.com/vshn/kharon/v2/internal/pkg/cache"
 )
 
 func Test_VerifyToken(t *testing.T) {

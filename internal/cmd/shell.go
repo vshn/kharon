@@ -13,10 +13,10 @@ import (
 	"go.uber.org/multierr"
 	"k8s.io/apimachinery/pkg/labels"
 
-	"github.com/vshn/kharon/internal/pkg/cache"
-	"github.com/vshn/kharon/internal/pkg/completion"
-	"github.com/vshn/kharon/internal/pkg/kubeconfig"
-	"github.com/vshn/kharon/internal/pkg/lieutenant"
+	"github.com/vshn/kharon/v2/internal/pkg/cache"
+	"github.com/vshn/kharon/v2/internal/pkg/completion"
+	"github.com/vshn/kharon/v2/internal/pkg/kubeconfig"
+	"github.com/vshn/kharon/v2/internal/pkg/lieutenant"
 )
 
 const shellCmdLongDesc = `Run a shell with a kubeconfig generated from the inventory, set up to use the proxy.

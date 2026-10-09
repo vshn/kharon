@@ -5,7 +5,7 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/vshn/kharon/internal/pkg/browser"
+	"github.com/vshn/kharon/v2/internal/pkg/browser"
 )
 
 // Browser is a thin shim to adapt kharons browser package to the kubelogin Browser interface.

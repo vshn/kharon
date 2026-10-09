@@ -13,7 +13,7 @@ import (
 	"github.com/int128/kubelogin/pkg/infrastructure/logger"
 	"github.com/spf13/cobra"
 
-	browser "github.com/vshn/kharon/internal/pkg/browser/kubelogin"
+	browser "github.com/vshn/kharon/v2/internal/pkg/browser/kubelogin"
 )
 
 func init() {

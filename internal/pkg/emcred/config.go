@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/vshn/kharon/internal/pkg/config"
+	"github.com/vshn/kharon/v2/internal/pkg/config"
 )
 
 // ReadPassboltKey reads the Passbolt private key from the config directory.

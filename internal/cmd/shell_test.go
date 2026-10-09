@@ -12,8 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"sigs.k8s.io/yaml"
 
-	"github.com/vshn/kharon/internal/pkg/cache"
-	"github.com/vshn/kharon/internal/pkg/lieutenant"
+	"github.com/vshn/kharon/v2/internal/pkg/cache"
+	"github.com/vshn/kharon/v2/internal/pkg/lieutenant"
 )
 
 const stubShellScript = `#!/bin/sh

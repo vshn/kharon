@@ -7,10 +7,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/vshn/kharon/internal/pkg/cache"
-	"github.com/vshn/kharon/internal/pkg/completion"
-	"github.com/vshn/kharon/internal/pkg/kubeconfig"
-	"github.com/vshn/kharon/internal/pkg/lieutenant"
+	"github.com/vshn/kharon/v2/internal/pkg/cache"
+	"github.com/vshn/kharon/v2/internal/pkg/completion"
+	"github.com/vshn/kharon/v2/internal/pkg/kubeconfig"
+	"github.com/vshn/kharon/v2/internal/pkg/lieutenant"
 )
 
 const switchCmdLongDesc = `Switches the context to the given cluster in the current kubeconfig file.

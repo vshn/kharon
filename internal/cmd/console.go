@@ -6,11 +6,11 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/vshn/kharon/internal/pkg/browser"
-	"github.com/vshn/kharon/internal/pkg/cache"
-	"github.com/vshn/kharon/internal/pkg/completion"
-	"github.com/vshn/kharon/internal/pkg/kubeconfig"
-	"github.com/vshn/kharon/internal/pkg/lieutenant"
+	"github.com/vshn/kharon/v2/internal/pkg/browser"
+	"github.com/vshn/kharon/v2/internal/pkg/cache"
+	"github.com/vshn/kharon/v2/internal/pkg/completion"
+	"github.com/vshn/kharon/v2/internal/pkg/kubeconfig"
+	"github.com/vshn/kharon/v2/internal/pkg/lieutenant"
 )
 
 func init() {

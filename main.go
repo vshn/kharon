@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/vshn/kharon/internal/cmd"
+	"github.com/vshn/kharon/v2/internal/cmd"
 )
 
 func main() {
