@@ -2,6 +2,7 @@ package completion
 
 import (
 	"log/slog"
+	"os"
 	"slices"
 	"strings"
 
@@ -11,8 +12,11 @@ import (
 	"github.com/vshn/kharon/v2/internal/pkg/lieutenant"
 )
 
+const NoFilterEnvVar = "KHARON_COMPLETION_NO_FILTER"
+
 // ClusterID returns a cobra.CompletionFunc that provides cluster IDs from the inventory file as suggestions.
 // The suggestions are filtered by the provided filter function and the current input prefix.
+// Set NoFilterEnvVar to disable the filter by the current input prefix.
 func ClusterID(clustersInventoryFile string, stopAfterFirst bool, filter func(lieutenant.Cluster) bool) cobra.CompletionFunc {
 	return func(_ *cobra.Command, args []string, cur string) ([]string, cobra.ShellCompDirective) {
 		if stopAfterFirst && len(args) > 0 {
@@ -25,6 +29,8 @@ func ClusterID(clustersInventoryFile string, stopAfterFirst bool, filter func(li
 			return nil, cobra.ShellCompDirectiveNoFileComp | cobra.ShellCompDirectiveError
 		}
 
+		_, noFilter := os.LookupEnv(NoFilterEnvVar)
+
 		suggestions := make([]string, 0, len(clusters))
 		for _, cluster := range clusters {
 			if cluster.ID == "" {
@@ -33,9 +39,10 @@ func ClusterID(clustersInventoryFile string, stopAfterFirst bool, filter func(li
 			if filter != nil && !filter(cluster) {
 				continue
 			}
-			if cur == "" || strings.HasPrefix(cluster.ID, cur) {
-				suggestions = append(suggestions, cluster.ID)
+			if !noFilter && !strings.HasPrefix(cluster.ID, cur) {
+				continue
 			}
+			suggestions = append(suggestions, cluster.ID)
 		}
 		slices.Sort(suggestions)
 
