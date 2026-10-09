@@ -5,8 +5,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/vshn/kharon/internal/pkg/lieutenant"
-	"github.com/vshn/kharon/internal/pkg/proxy/mapping"
+	"github.com/vshn/kharon/v2/internal/pkg/lieutenant"
+	"github.com/vshn/kharon/v2/internal/pkg/proxy/mapping"
 )
 
 func Test_JumphostMappingFromClusters(t *testing.T) {

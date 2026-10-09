@@ -1,4 +1,4 @@
-module github.com/vshn/kharon
+module github.com/vshn/kharon/v2
 
 go 1.27.2
 

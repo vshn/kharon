@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/labels"
 
-	"github.com/vshn/kharon/internal/pkg/lieutenant/login"
+	"github.com/vshn/kharon/v2/internal/pkg/lieutenant/login"
 )
 
 func Test_Client_Clusters(t *testing.T) {

@@ -17,8 +17,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/vshn/kharon/internal/pkg/conntest"
-	"github.com/vshn/kharon/internal/pkg/lieutenant"
+	"github.com/vshn/kharon/v2/internal/pkg/conntest"
+	"github.com/vshn/kharon/v2/internal/pkg/lieutenant"
 )
 
 func Test_TestClusters(t *testing.T) {

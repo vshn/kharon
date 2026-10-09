@@ -14,8 +14,8 @@ import (
 	kcapi "k8s.io/client-go/tools/clientcmd/api"
 	"sigs.k8s.io/yaml"
 
-	"github.com/vshn/kharon/internal/pkg/kubeconfig"
-	"github.com/vshn/kharon/internal/pkg/lieutenant"
+	"github.com/vshn/kharon/v2/internal/pkg/kubeconfig"
+	"github.com/vshn/kharon/v2/internal/pkg/lieutenant"
 )
 
 func Test_FromClusters_Encode(t *testing.T) {

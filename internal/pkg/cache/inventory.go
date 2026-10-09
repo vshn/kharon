@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/vshn/kharon/internal/pkg/lieutenant"
+	"github.com/vshn/kharon/v2/internal/pkg/lieutenant"
 )
 
 // InventoryFileVersion is the version of the inventory file format. It can be used to detect incompatible changes in the file format.

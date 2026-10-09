@@ -7,8 +7,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/vshn/kharon/internal/pkg/lieutenant"
-	"github.com/vshn/kharon/internal/pkg/proxy/mapping"
+	"github.com/vshn/kharon/v2/internal/pkg/lieutenant"
+	"github.com/vshn/kharon/v2/internal/pkg/proxy/mapping"
 )
 
 func Test_CacheDir(t *testing.T) {

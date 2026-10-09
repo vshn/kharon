@@ -12,9 +12,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/vshn/kharon/internal/pkg/activation"
-	"github.com/vshn/kharon/internal/pkg/cache"
-	"github.com/vshn/kharon/internal/pkg/proxy"
+	"github.com/vshn/kharon/v2/internal/pkg/activation"
+	"github.com/vshn/kharon/v2/internal/pkg/cache"
+	"github.com/vshn/kharon/v2/internal/pkg/proxy"
 )
 
 const defaultProxyAddr = "localhost:12000"

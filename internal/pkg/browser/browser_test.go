@@ -8,7 +8,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/vshn/kharon/internal/pkg/browser"
+	"github.com/vshn/kharon/v2/internal/pkg/browser"
 )
 
 func Test_Browser(t *testing.T) {

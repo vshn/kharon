@@ -12,7 +12,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/vshn/kharon/internal/pkg/lieutenant"
+	"github.com/vshn/kharon/v2/internal/pkg/lieutenant"
 )
 
 type Report struct {

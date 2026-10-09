@@ -25,8 +25,8 @@ import (
 	"tailscale.com/net/proxymux"
 	"tailscale.com/net/socks5"
 
-	"github.com/vshn/kharon/internal/pkg/cache"
-	"github.com/vshn/kharon/internal/pkg/sshconfig"
+	"github.com/vshn/kharon/v2/internal/pkg/cache"
+	"github.com/vshn/kharon/v2/internal/pkg/sshconfig"
 )
 
 const keepAliveRequestType = "keepalive@kharon"

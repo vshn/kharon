@@ -17,8 +17,8 @@ import (
 	"github.com/openshift/library-go/pkg/oauth/tokenrequest"
 	"k8s.io/client-go/rest"
 
-	"github.com/vshn/kharon/internal/pkg/browser"
-	"github.com/vshn/kharon/internal/pkg/cache"
+	"github.com/vshn/kharon/v2/internal/pkg/browser"
+	"github.com/vshn/kharon/v2/internal/pkg/cache"
 )
 
 var (

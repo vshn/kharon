@@ -162,7 +162,7 @@ func ShellCompletionNotice() {
 func BrowserSetupNotice() {
 	fmt.Println()
 	fmt.Println(color.GreenString("Don't forget to setup your browser to use the proxy!"))
-	fmt.Printf("Check %s for instructions.\n", color.CyanString("https://github.com/vshn/kharon/tree/main/docs/setup"))
+	fmt.Printf("Check %s for instructions.\n", color.CyanString("https://github.com/vshn/kharon/v2/tree/main/docs/setup"))
 }
 
 func forceOverwriteFile(path, content string) error {

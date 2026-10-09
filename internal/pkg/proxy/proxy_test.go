@@ -31,9 +31,9 @@ import (
 	"golang.org/x/crypto/ssh/knownhosts"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/vshn/kharon/internal/pkg/cache"
-	"github.com/vshn/kharon/internal/pkg/proxy/mapping"
-	"github.com/vshn/kharon/internal/pkg/sshconfig"
+	"github.com/vshn/kharon/v2/internal/pkg/cache"
+	"github.com/vshn/kharon/v2/internal/pkg/proxy/mapping"
+	"github.com/vshn/kharon/v2/internal/pkg/sshconfig"
 )
 
 func Test_jumphostChainForTarget(t *testing.T) {

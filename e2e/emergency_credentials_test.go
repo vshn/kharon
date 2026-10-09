@@ -16,7 +16,7 @@ import (
 	"github.com/pquerna/otp/totp"
 	"github.com/stretchr/testify/require"
 
-	"github.com/vshn/kharon/internal/pkg/config"
+	"github.com/vshn/kharon/v2/internal/pkg/config"
 )
 
 const (
