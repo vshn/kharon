@@ -28,7 +28,7 @@ func init() {
 	flag.StringVar(&clustersInventoryFile, "inventory-file", inventoryFilePath(), "Path to the inventory file that should be used by this command.")
 	flag.StringArrayVar(&clustersExcludePatterns, "exclude-cluster", nil, "Exclude clusters matching the given wildcard pattern. Can be specified multiple times to exclude multiple patterns.")
 	flag.Func("fact-selector", "Label selector to filter clusters based on their facts. Example: 'distribution=openshift4,release_channel=fast'", selectorFlagFunc(&clustersFactSelector))
-	flag.Func("dynamic-fact-selector", "Label selector to filter clusters based on their dynamic facts. Example: 'distribution=openshift4,release_channel=fast'", selectorFlagFunc(&clustersDynamicFactSelector))
+	flag.Func("dynamic-fact-selector", "Label selector to filter clusters based on their dynamic facts. Example: 'openshiftBaseDomain in (cloudscale-lpg-2.appuio.cloud,exoscale-ch-gva-2-0.appuio.cloud)'", selectorFlagFunc(&clustersDynamicFactSelector))
 	flag.VarP(&clustersOutputValue{val: &clustersOutputFormat}, "output", "o", "Output format. One of: table, json.")
 	must(clustersCmd.RegisterFlagCompletionFunc("output", cobra.FixedCompletions([]string{"table", "json"}, cobra.ShellCompDirectiveNoFileComp)))
 	must(clustersCmd.RegisterFlagCompletionFunc("exclude-cluster", completion.ClusterID(clustersInventoryFile, true, nil)))

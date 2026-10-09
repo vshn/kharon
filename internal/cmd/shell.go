@@ -98,7 +98,7 @@ func newShellCmd() *cobra.Command {
 	flag.StringSliceVar(&flags.ClusterExcludePatterns, "exclude-cluster", nil, "Exclude clusters matching the given patterns. Supports wildcards, e.g. `--exclude-cluster=c-dev-*` to exclude all clusters starting with `c-dev-`. This flag can be used multiple times to exclude multiple patterns. Useful in combination with --each to exclude certain clusters from the per-cluster execution.")
 	must(cmd.RegisterFlagCompletionFunc("exclude-cluster", completion.ClusterID(flags.InventoryFile, true, nil)))
 	flag.Func("fact-selector", "Label selector to filter clusters based on their facts. Example: 'distribution=openshift4,release_channel=fast'", selectorFlagFunc(&flags.FactSelector))
-	flag.Func("dynamic-fact-selector", "Label selector to filter clusters based on their dynamic facts. Example: 'distribution=openshift4,release_channel=fast'", selectorFlagFunc(&flags.DynamicFactSelector))
+	flag.Func("dynamic-fact-selector", "Label selector to filter clusters based on their dynamic facts. Example: 'openshiftBaseDomain in (cloudscale-lpg-2.appuio.cloud,exoscale-ch-gva-2-0.appuio.cloud)'", selectorFlagFunc(&flags.DynamicFactSelector))
 
 	return cmd
 }
