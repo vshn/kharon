@@ -197,8 +197,8 @@ github.com/opencontainers/go-digest v1.0.0 h1:apOUWs51W5PlhuyGyz9FCeeBIOUDA/6nW8
 github.com/opencontainers/go-digest v1.0.0/go.mod h1:0JzlMkj0TRzQZfJkVvzbP0HBR3IKzErnv2BNG4W4MAM=
 github.com/opencontainers/image-spec v1.1.1 h1:y0fUlFfIZhPF1W537XOLg0/fcx6zcHCJwooC2xJA040=
 github.com/opencontainers/image-spec v1.1.1/go.mod h1:qpqAh3Dmcf36wStyyWU+kCeDgrGnAve2nCC8+7h8Q0M=
-github.com/openshift/library-go v0.0.0-20261008081759-c51f6ebeb7cb h1:NZeMIVoAtOFwqBvZPW5OVKJ2KLlNnoPh+mol+YOQAFk=
-github.com/openshift/library-go v0.0.0-20261008081759-c51f6ebeb7cb/go.mod h1:g3KONLBdxKU5r4K/Qcgg29Re5Rdx9URj0ZelXFGLxGo=
+github.com/openshift/library-go v0.0.0-20261016185738-b2ae89191cc2 h1:V84t/iPMEQFADcO0Roqd0GWn8IvyWAL3XVAs/CAJEkw=
+github.com/openshift/library-go v0.0.0-20261016185738-b2ae89191cc2/go.mod h1:EwF5uw+vMz6MG3Fj2wKMfNsHl7y+FLgJvZIpNUFxQss=
 github.com/openshift/osincli v0.0.0-20160924135400-fababb0555f2 h1:9oADVMmPa4G60MQtoSjD26aD/vZreqbIAfiUiO220eY=
 github.com/openshift/osincli v0.0.0-20160924135400-fababb0555f2/go.mod h1:Riv9DbfKiX3y9ebcS4PHU4zLhVXu971+4jCVwKIue5M=
 github.com/passbolt/go-passbolt v0.8.3 h1:9ybKiVCpojZJ3f+3TKvzbftC+y37prKdOfzf4O6Z9k8=
