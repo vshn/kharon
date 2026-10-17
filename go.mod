@@ -16,7 +16,7 @@ require (
 	github.com/int128/kubelogin v1.36.4
 	github.com/minio/pkg/v3 v3.11.0
 	github.com/oauth2-proxy/mockoidc v0.0.0-20240214162133-caebfff84d25
-	github.com/openshift/library-go v0.0.0-20261008081759-c51f6ebeb7cb
+	github.com/openshift/library-go v0.0.0-20261016185738-b2ae89191cc2
 	github.com/passbolt/go-passbolt v0.8.3
 	github.com/pquerna/otp v1.5.0
 	github.com/spf13/cobra v1.10.2
