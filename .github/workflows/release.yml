@@ -120,7 +120,7 @@ jobs:
           sed -i "s/^pkgrel=.*/pkgrel=1/" PKGBUILD
 
       - name: Commit and push
-        uses: stefanzweifel/git-auto-commit-action@4a55954c782fc1ea30b9056cd3e7a2b40ca8887d # v7
+        uses: stefanzweifel/git-auto-commit-action@d0b01107b5db882071f96de5dd4b54961ea93f4c # v7
         with:
           commit_message: "Bump PKGBUILD to ${{ github.ref_name }}"
           file_pattern: PKGBUILD
@@ -154,7 +154,7 @@ jobs:
           go run ./hack/homebrew "${{ github.ref_name }}" checksums.txt > homebrew-tap/Casks/kharon.rb
 
       - name: Commit and push
-        uses: stefanzweifel/git-auto-commit-action@4a55954c782fc1ea30b9056cd3e7a2b40ca8887d # v7
+        uses: stefanzweifel/git-auto-commit-action@d0b01107b5db882071f96de5dd4b54961ea93f4c # v7
         with:
           commit_message: "Kharon Cask update to ${{ github.ref_name }}"
           repository: homebrew-tap
