@@ -64,7 +64,7 @@ require (
 	github.com/int128/oauth2cli v1.18.0 // indirect
 	github.com/int128/oauth2dev v1.1.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
-	github.com/kisielk/errcheck v1.20.0 // indirect
+	github.com/kisielk/errcheck v1.30.0 // indirect
 	github.com/mattn/go-colorable v0.1.16 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/miekg/dns v1.1.73 // indirect
