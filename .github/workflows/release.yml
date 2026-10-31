@@ -77,7 +77,7 @@ jobs:
 
       - name: Build changelog from PRs with labels
         id: build_changelog
-        uses: mikepenz/release-changelog-builder-action@aa013739bbc8e7067dbbecd4525ff11aeb51a84b # v6
+        uses: mikepenz/release-changelog-builder-action@b0db9d18b53447ef9f940a46c8f31653c4d9f621 # v6
         with:
           configuration: ".github/changelog-configuration.json"
           # PreReleases still get a changelog, but the next full release gets a diff since the last full release,
@@ -120,7 +120,7 @@ jobs:
           sed -i "s/^pkgrel=.*/pkgrel=1/" PKGBUILD
 
       - name: Commit and push
-        uses: stefanzweifel/git-auto-commit-action@4a55954c782fc1ea30b9056cd3e7a2b40ca8887d # v7
+        uses: stefanzweifel/git-auto-commit-action@d0b01107b5db882071f96de5dd4b54961ea93f4c # v7
         with:
           commit_message: "Bump PKGBUILD to ${{ github.ref_name }}"
           file_pattern: PKGBUILD
@@ -154,7 +154,7 @@ jobs:
           go run ./hack/homebrew "${{ github.ref_name }}" checksums.txt > homebrew-tap/Casks/kharon.rb
 
       - name: Commit and push
-        uses: stefanzweifel/git-auto-commit-action@4a55954c782fc1ea30b9056cd3e7a2b40ca8887d # v7
+        uses: stefanzweifel/git-auto-commit-action@d0b01107b5db882071f96de5dd4b54961ea93f4c # v7
         with:
           commit_message: "Kharon Cask update to ${{ github.ref_name }}"
           repository: homebrew-tap
