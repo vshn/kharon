@@ -1,6 +1,7 @@
 package completion_test
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -50,9 +51,45 @@ func Test_ClusterID(t *testing.T) {
 			return cluster.ID != "c-beta"
 		})
 
-		suggestions, directive := subject(nil, nil, "c-")
-		assert.Equal(t, []string{"c-alpha", "c-gamma"}, suggestions)
+		suggestions, directive := subject(nil, nil, "")
+		assert.Equal(t, []string{"c-alpha", "c-gamma", "x-outside-prefix"}, suggestions)
 		assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+	})
+
+	t.Run("Filters by current input prefix by default", func(t *testing.T) {
+		t.Setenv(completion.NoFilterEnvVar, "")
+		require.NoError(t, os.Unsetenv(completion.NoFilterEnvVar))
+
+		inventoryFile := filepath.Join(t.TempDir(), "inventory.json")
+		require.NoError(t, cache.WriteInventoryFile(inventoryFile, []lieutenant.Cluster{
+			{ID: "c-alpha"},
+			{ID: "c-beta"},
+		}))
+
+		subject := completion.ClusterID(inventoryFile, false, nil)
+
+		suggestions, _ := subject(nil, nil, "c-a")
+		assert.Equal(t, []string{"c-alpha"}, suggestions)
+
+		suggestions, _ = subject(nil, nil, "beta")
+		assert.Empty(t, suggestions)
+	})
+
+	t.Run("Does not filter by current input if disabled by environment variable", func(t *testing.T) {
+		t.Setenv(completion.NoFilterEnvVar, "")
+
+		inventoryFile := filepath.Join(t.TempDir(), "inventory.json")
+		require.NoError(t, cache.WriteInventoryFile(inventoryFile, []lieutenant.Cluster{
+			{ID: "c-alpha"},
+			{ID: "c-beta"},
+		}))
+
+		subject := completion.ClusterID(inventoryFile, false, nil)
+
+		for _, cur := range []string{"", "c-a", "bet", "no-match"} {
+			suggestions, _ := subject(nil, nil, cur)
+			assert.Equal(t, []string{"c-alpha", "c-beta"}, suggestions, "cur=%q", cur)
+		}
 	})
 
 	t.Run("Returns error directive when inventory file cannot be read", func(t *testing.T) {
